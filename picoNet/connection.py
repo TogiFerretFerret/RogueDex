@@ -78,10 +78,14 @@ class Connection:
         if not self.is_connected:
             return
 
+        # Sanitize the ack number for packing. -1 is a sentinel value for
+        # "no packets received yet" and is invalid for an unsigned short.
+        ack_to_send = self._remote_sequence_number if self._remote_sequence_number != -1 else 0
+
         header = PacketHeader(
             protocol_id=12345, # Our project's magic number
             sequence=self._sequence_number,
-            ack=self._remote_sequence_number,
+            ack=ack_to_send,
             ack_bitfield=self._ack_bitfield
         )
         packet = Packet(header=header, payload=serialize(payload))
@@ -149,9 +153,9 @@ class Connection:
         self._process_acks(packet.header.ack, packet.header.ack_bitfield)
 
         # Update our incoming sequence number and bitfield
-        if is_sequence_greater(packet.header.sequence, self._remote_sequence_number):
-            diff = packet.header.sequence - self._remote_sequence_number
-            self._ack_bitfield = (self._ack_bitfield << diff) | (1 << (diff - 1))
+        if self._remote_sequence_number == -1 or is_sequence_greater(packet.header.sequence, self._remote_sequence_number):
+            diff = packet.header.sequence - self._remote_sequence_number if self._remote_sequence_number != -1 else 1
+            self._ack_bitfield = (self._ack_bitfield << diff) | (1 << (diff - 1)) if diff > 0 else 0
             self._remote_sequence_number = packet.header.sequence
         else:
             diff = self._remote_sequence_number - packet.header.sequence
@@ -170,7 +174,7 @@ class Connection:
         # The bitfield acknowledges the 16 packets before the main ACK
         for i in range(16):
             if (bitfield >> i) & 1:
-                seq_to_ack = (ack - 1 - i) % 65536
+                seq_to_ack = (ack - 1 - i) % 65535
                 if seq_to_ack in self._sent_packets:
                     del self._sent_packets[seq_to_ack]
     
@@ -180,7 +184,7 @@ class Connection:
         # assume it's lost and resend it.
         timeout_threshold = self.rtt * 1.5 
         now = time.time()
-        for seq, (sent_time, data) in self._sent_packets.items():
+        for seq, (sent_time, data) in list(self._sent_packets.items()):
             if now - sent_time > timeout_threshold:
                 print(f"Resending likely lost packet: {seq}")
                 self._socket.send(self.remote_address, data)

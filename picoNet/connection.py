@@ -153,31 +153,41 @@ class Connection:
     def _process_received_packet(self, packet: Packet):
         """Processes a single, valid packet received from the remote host."""
         seq = packet.header.sequence
+        
+        # First, always process the ACK field of any incoming packet. It might
+        # contain new information about packets we've sent.
+        self._process_acks(packet.header.ack, packet.header.ack_bitfield)
+
+        # Now, handle the payload of the incoming packet. If we've already
+        # processed this sequence number, it's a duplicate, so we can ignore it.
         if seq in self._received_sequences:
-            # This is a duplicate packet, ignore its payload.
-            # We still process its ACK field, as it might contain new info.
-            self._process_acks(packet.header.ack, packet.header.ack_bitfield)
             return
         
         self._received_sequences.append(seq)
         self._received_payloads.append(deserialize(packet.payload))
 
-        # Update our record of which packets the remote host has received
-        self._process_acks(packet.header.ack, packet.header.ack_bitfield)
-
-        # Update our incoming sequence number and bitfield
+        # Finally, update our own ACK state to reflect that we received THIS packet.
         if self._remote_sequence_number == -1 or is_sequence_greater(seq, self._remote_sequence_number):
-            diff = seq - self._remote_sequence_number if self._remote_sequence_number != -1 else seq + 1
-            if diff < 16:
-                self._ack_bitfield <<= diff
-            else:
-                self._ack_bitfield = 0 # Gap is too large, reset history
+            # This packet is the new "latest" packet we've seen.
+            # Shift the bitfield based on the jump from the previous latest.
+            if self._remote_sequence_number != -1:
+                diff = seq - self._remote_sequence_number
+                if diff <= 16:
+                    self._ack_bitfield <<= diff
+                else:
+                    self._ack_bitfield = 0 # Gap too large, history is invalid.
+            
+            # Mark THIS packet (the new latest) as received in the first bit.
+            self._ack_bitfield |= 1
+            
+            # Update the latest sequence number.
             self._remote_sequence_number = seq
-        
-        # Mark this packet as received in the bitfield
-        diff_from_latest = self._remote_sequence_number - seq
-        if 0 < diff_from_latest <= 16:
-             self._ack_bitfield |= (1 << (diff_from_latest - 1))
+        else:
+            # This packet is older than our latest, but we haven't seen it before.
+            # Mark its corresponding bit in the bitfield.
+            diff = self._remote_sequence_number - seq
+            if diff <= 16:
+                self._ack_bitfield |= (1 << diff)
 
 
     def _process_acks(self, ack: int, bitfield: int):

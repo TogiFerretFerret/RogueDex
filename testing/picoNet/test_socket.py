@@ -1,5 +1,5 @@
 """
-testing/test_socket.py
+testing/picoNet/test_socket.py
 
 Unit tests for the picoNet.socket module.
 """
@@ -10,7 +10,7 @@ import os
 import time
 
 # Add the root project directory to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..','..')))
 
 from picoNet.socket import PicoSocket
 
@@ -85,4 +85,5 @@ class TestPicoSocket(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
+def remote_test():
+    unittest.main()

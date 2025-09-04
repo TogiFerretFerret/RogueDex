@@ -1,5 +1,5 @@
 """
-testing/test_packet.py
+testing/picoNet/test_packet.py
 
 Unit tests for the picoNet.packet module.
 """
@@ -10,7 +10,7 @@ import os
 
 # Add the root project directory to the Python path
 # This allows us to import modules from the picoNet library
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..','..')))
 
 from picoNet.packet import Packet, PacketHeader, pack_packet, unpack_packet
 
@@ -66,4 +66,5 @@ class TestPacket(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
+def remote_test():
+    unittest.main()

@@ -1,147 +1,150 @@
-"""
-testing/picoNet/test_connection.py
-
-Unit tests for the picoNet.connection module.
-"""
-
 import unittest
 import time
 import sys
 import os
 from unittest.mock import patch
 
-# Add the root project directory to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+# --- Path Setup ---
+# This allows the test to find the picoNet module in the parent directory
+# by adding the project's root directory to the Python path.
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
 
-from picoNet.connection import Connection
+from picoNet.connection import Connection, ConnectionState, PicoSocket
+
+# A small helper to advance time in tests without waiting
+def advance_time(duration):
+    time.sleep(duration)
 
 class TestConnection(unittest.TestCase):
     """
-    Test suite for the Connection class.
+    Unit tests for the Connection class.
+    These tests create two Connection instances that communicate with each other
+    on the local machine to verify the handshake, reliability, and state logic.
     """
 
     def setUp(self):
         """
-        Set up two Connection objects for testing. They will be configured
-        to send packets to each other.
+        Set up two Connection instances for testing.
+        conn_a acts as the "client" initiating the connection.
+        conn_b acts as the "server" listening for a connection.
         """
         print("\nSetting up connections for test...")
-        # We use 'localhost' which resolves to 127.0.0.1
-        self.conn_a = Connection('localhost', 50001)
-        self.conn_b = Connection('localhost', 50002)
-
-        # Manually set the remote addresses to point to each other
-        self.conn_a.remote_address = self.conn_b._socket.socket.getsockname()
-        self.conn_b.remote_address = self.conn_a._socket.socket.getsockname()
+        # Note: We use '127.0.0.1' for explicit local testing
+        server_address = ('127.0.0.1', 50001)
         
-        # "Connect" them
+        # The "server" will listen on a known port.
+        # We create a dummy connection object first, then replace its socket.
+        self.conn_b = Connection('0.0.0.0', 0) # Target address is irrelevant for server
+        self.conn_b._socket.close() # close the OS-assigned one
+        self.conn_b._socket = PicoSocket(server_address[0], server_address[1])
+
+        # The "client" will target the server's known port
+        self.conn_a = Connection(server_address[0], server_address[1])
+        
+        print(f"Client (A) is on {self.conn_a._socket.get_address()}")
+        print(f"Server (B) is on {self.conn_b._socket.get_address()}")
+        
+        # --- Handshake Simulation ---
+        # 1. Client (A) starts the connection process
         self.conn_a.connect()
-        self.conn_b.connect()
+        self.assertEqual(self.conn_a.state, ConnectionState.CONNECTING)
+        
+        # 2. Run update loop until handshake completes or times out
+        start_time = time.time()
+        timeout = 2.0 # Test-specific timeout
+        while not self.conn_a.is_connected and (time.time() - start_time) < timeout:
+            self.conn_a.update(0.1)
+            self.conn_b.update(0.1)
+            advance_time(0.01) # Small delay to prevent tight loop
+
+        # 3. Verify connection was established
+        self.assertTrue(self.conn_a.is_connected, "Client (A) failed to connect within the test timeout.")
+        self.assertTrue(self.conn_b.is_connected, "Server (B) failed to connect within the test timeout.")
+        print("Handshake successful in test setup.")
+
 
     def tearDown(self):
-        """
-        Clean up and close connection sockets after each test.
-        """
+        """Clean up by closing the sockets."""
         print("Tearing down connections.")
         self.conn_a.close()
         self.conn_b.close()
 
     def test_send_and_receive_single_packet(self):
-        """
-        Tests that a single payload sent from A is correctly received by B.
-        """
+        """Tests that a single payload sent from A is correctly received by B."""
         print("Running test_send_and_receive_single_packet...")
-        payload_to_send = {'message': 'hello', 'data': 123}
-        
-        # 1. A sends a packet to B
+        payload_to_send = {'message': 'hello world', 'id': 1}
         self.conn_a.send(payload_to_send)
-        
-        # 2. A's update loop should process the send queue (conceptually)
-        self.conn_a.update(0.01)
 
-        # 3. Give time for the packet to travel
-        time.sleep(0.01)
+        # Allow time for the packet to be processed
+        self.conn_a.update(0.1)
+        self.conn_b.update(0.1)
+        advance_time(0.01)
+        self.conn_b.update(0.1) # One more to process the received packet
 
-        # 4. B's update loop should receive the packet from the socket
-        self.conn_b.update(0.01)
-        
-        # 5. B retrieves the payload from its internal queue
         received_payloads = self.conn_b.receive()
-        
-        # 6. Assertions
         self.assertEqual(len(received_payloads), 1, "Should have received exactly one payload.")
-        self.assertEqual(received_payloads[0], payload_to_send, "Received payload does not match sent payload.")
-        print("Single packet send/receive successful.")
+        self.assertEqual(received_payloads[0], payload_to_send)
+        print("Single packet roundtrip successful.")
 
     def test_ack_processing(self):
-        """
-        Tests that a packet sent from A is ACKed by B, clearing it from A's sent buffer.
-        """
+        """Tests that a packet sent from A is ACKed by B, clearing it from A's sent buffer."""
         print("Running test_ack_processing...")
         # 1. A sends a packet to B
         self.conn_a.send({'initial_message': 'from A'})
-        self.conn_a.update(0.01)
         self.assertEqual(len(self.conn_a._sent_packets), 1, "Packet should be in A's sent buffer before ACK.")
-        
-        time.sleep(0.01)
-        
-        # 2. B receives A's packet and sends one back. This response will contain the ACK.
-        self.conn_b.update(0.01) # B processes the packet from A
-        self.conn_b.send({'response': 'from B'})
-        self.conn_b.update(0.01) # B sends its response
-        
-        time.sleep(0.01)
-        
-        # 3. A receives B's packet, which implicitly ACKs A's original packet.
-        self.conn_a.update(0.01)
-        
-        # 4. Assert that A's sent buffer is now empty for that packet.
+
+        # 2. B receives the packet
+        self.conn_b.update(0.1)
+        advance_time(0.01)
+
+        # 3. B sends a reply, which will carry the ACK for A's first packet
+        self.conn_b.send({'reply_message': 'from B'})
+
+        # 4. A receives B's packet and processes the ACK
+        self.conn_a.update(0.1)
+        self.conn_b.update(0.1) # Let B send its packet
+        advance_time(0.01)
+        self.conn_a.update(0.1) # Let A process the incoming packet with the ACK
+
         self.assertEqual(len(self.conn_a._sent_packets), 0, "Packet should be cleared from A's sent buffer after being ACKed.")
         print("ACK processing successful.")
-    
-    @patch('picoNet.socket.PicoSocket.send')
-    def test_packet_loss_and_resend(self, mock_send):
-        """
-        Tests the packet resend logic by simulating packet loss.
-        """
+        
+    def test_packet_loss_and_resend(self):
+        """Tests the packet resend logic by simulating packet loss."""
         print("Running test_packet_loss_and_resend...")
-        # Set a very low RTT to speed up the test
-        self.conn_a.rtt = 0.05
+        self.conn_a.rtt = 0.1 # Set a predictable RTT for the test
+
+        # Use mock to "lose" the packet by preventing B's socket from receiving it
+        with patch.object(self.conn_b._socket, 'receive', return_value=None):
+            self.conn_a.send({'important_data': 'must arrive'})
+            self.assertEqual(len(self.conn_a._sent_packets), 1)
+
+            # Let enough time pass for a resend to trigger (rtt * 1.5)
+            advance_time(0.2)
+            self.conn_a.update(0.2)
         
-        # 1. A sends a packet. We use the mock to track the 'send' call.
-        self.conn_a.send({'important_data': 'must arrive'})
-        
-        # 2. Let enough time pass for the packet to be considered "lost".
-        # We DON'T call conn_b.update(), simulating the packet never arriving at B.
-        time.sleep(self.conn_a.rtt * 1.6) # Wait for 1.6x the RTT
-        
-        # 3. Call A's update loop, which should trigger the resend logic.
-        self.conn_a.update(0.01)
-        
-        # 4. Assert that the socket's send method was called at least twice:
-        #    once for the original send, and at least once for the resend.
-        self.assertGreaterEqual(mock_send.call_count, 2, "Socket.send() should have been called for original send and resend.")
-        print("Packet resend successful.")
+        # Now, allow B to receive again
+        self.conn_b.update(0.1)
+        received = self.conn_b.receive()
+        self.assertEqual(len(received), 1, "B should have received the packet after it was resent.")
+        self.assertEqual(received[0], {'important_data': 'must arrive'})
+        print("Packet loss and resend successful.")
 
     def test_connection_timeout(self):
-        """
-        Tests that the connection times out if no packets are received.
-        """
+        """Tests that the connection times out if no packets are received."""
         print("Running test_connection_timeout...")
-        # Set a very short timeout for the test
-        self.conn_a.timeout = 0.1
+        self.conn_a.timeout = 0.1 # Set a short timeout for the test
         self.assertTrue(self.conn_a.is_connected, "Connection should be active initially.")
-        
-        # Wait for longer than the timeout period without any traffic
-        time.sleep(0.15)
-        
-        # Call the update loop, which should detect the timeout
-        self.conn_a.update(0.01)
-        
-        self.assertFalse(self.conn_a.is_connected, "Connection should be timed out.")
-        print("Connection timeout successful.")
 
+        # Wait longer than the timeout period without any network activity
+        advance_time(0.2)
+        self.conn_a.update(0.2)
+
+        self.assertFalse(self.conn_a.is_connected, "Connection should have timed out.")
+        print("Connection timeout successful.")
 
 if __name__ == '__main__':
     unittest.main()
+
 

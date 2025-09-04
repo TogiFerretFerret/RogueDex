@@ -128,10 +128,7 @@ class Connection:
         """
         The main update loop for the connection. This must be called regularly.
         """
-        # Handle state-specific logic
-        if self.state == ConnectionState.DISCONNECTED:
-            pass # But still listen for new connections
-        
+        # Handle state-specific logic for timeouts and resends
         if self.state == ConnectionState.CONNECTING:
             if time.time() - self._handshake_start_time > HANDSHAKE_TIMEOUT:
                 print("Handshake timed out.")
@@ -146,10 +143,10 @@ class Connection:
                 self.state = ConnectionState.DISCONNECTED
                 return
 
-        # Receive all incoming packets from the socket
+        # Receive and process all incoming packets
         self._receive_packets()
 
-        # If connected, resend any lost packets
+        # If connected, resend any lost application packets
         if self.state == ConnectionState.CONNECTED:
             self._resend_lost_packets()
     
@@ -162,33 +159,35 @@ class Connection:
 
             data, address = received
             
-            # For the server-side, a DISCONNECTED state can accept a new connection.
-            if self.state == ConnectionState.DISCONNECTED:
-                if data == HANDSHAKE_CHALLENGE:
-                    print(f"Received handshake challenge from {address}. Sending response.")
-                    # A "server" learns its client's address from the challenge.
-                    self.remote_address = address 
-                    self._socket.send(self.remote_address, HANDSHAKE_RESPONSE)
+            # --- Handshake Packet Handling ---
+            # This logic is processed regardless of the current connection state,
+            # making the handshake robust and idempotent.
+            if data == HANDSHAKE_CHALLENGE:
+                # A peer has initiated or re-sent a connection request.
+                print(f"Received handshake challenge from {address}. Sending response.")
+                if self.state == ConnectionState.DISCONNECTED:
+                    # This is a new connection from our perspective (acting as server).
+                    self.remote_address = address
                     self.state = ConnectionState.CONNECTED
                     self.last_receive_time = time.time()
-                    # Reset sequence numbers for this new connection
-                    self._remote_sequence_number = -1 
+                    self._remote_sequence_number = -1
                     self._sequence_number = 0
-                continue
+                self._socket.send(address, HANDSHAKE_RESPONSE)
+                continue # Handshake packet processed.
 
-            # A client or established connection must come from the known address.
-            if address != self.remote_address:
-                continue
-
-            # If we are in the connecting state, we only care about the response
-            if self.state == ConnectionState.CONNECTING:
-                if data == HANDSHAKE_RESPONSE:
+            if data == HANDSHAKE_RESPONSE:
+                # We received a response to our challenge.
+                if self.state == ConnectionState.CONNECTING and address == self.remote_address:
                     print("Handshake successful. Connection established.")
                     self.state = ConnectionState.CONNECTED
                     self.last_receive_time = time.time()
+                continue # Handshake packet processed.
+
+            # --- Application Packet Handling ---
+            # If we are not fully connected, ignore any non-handshake packets.
+            if self.state != ConnectionState.CONNECTED or address != self.remote_address:
                 continue
 
-            # If we are connected, process the full packet
             try:
                 packet = unpack_packet(data)
                 self.last_receive_time = time.time()
@@ -212,11 +211,16 @@ class Connection:
             if self._remote_sequence_number != -1:
                 diff = seq - self._remote_sequence_number
                 if diff <= 16:
+                    # A new latest packet has arrived. Shift the existing bitfield
+                    # to match the new sequence number and mark the bit for the
+                    # *previous* latest sequence number as received.
                     self._ack_bitfield = (self._ack_bitfield << diff) | (1 << (diff - 1))
                 else:
+                    # The gap is too large; the old bitfield is irrelevant.
                     self._ack_bitfield = 0
             self._remote_sequence_number = seq
         else:
+            # An older packet arrived out of order. Mark its bit.
             diff = self._remote_sequence_number - seq
             if diff <= 16:
                 self._ack_bitfield |= (1 << (diff - 1))

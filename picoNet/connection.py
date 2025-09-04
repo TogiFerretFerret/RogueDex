@@ -57,6 +57,9 @@ class Connection:
         # {sequence_number: (send_time, packed_packet_data)}
         self._sent_packets: Dict[int, Tuple[float, bytes]] = {}
 
+        # A set to keep track of the sequence numbers of received packets to avoid duplicates.
+        self._received_sequences: collections.deque = collections.deque(maxlen=32)
+
         # A queue for payloads received from the remote host that are ready to be
         # processed by the application layer.
         self._received_payloads: collections.deque = collections.deque()
@@ -149,21 +152,33 @@ class Connection:
 
     def _process_received_packet(self, packet: Packet):
         """Processes a single, valid packet received from the remote host."""
+        seq = packet.header.sequence
+        if seq in self._received_sequences:
+            # This is a duplicate packet, ignore its payload.
+            # We still process its ACK field, as it might contain new info.
+            self._process_acks(packet.header.ack, packet.header.ack_bitfield)
+            return
+        
+        self._received_sequences.append(seq)
+        self._received_payloads.append(deserialize(packet.payload))
+
         # Update our record of which packets the remote host has received
         self._process_acks(packet.header.ack, packet.header.ack_bitfield)
 
         # Update our incoming sequence number and bitfield
-        if self._remote_sequence_number == -1 or is_sequence_greater(packet.header.sequence, self._remote_sequence_number):
-            diff = packet.header.sequence - self._remote_sequence_number if self._remote_sequence_number != -1 else 1
-            self._ack_bitfield = (self._ack_bitfield << diff) | (1 << (diff - 1)) if diff > 0 else 0
-            self._remote_sequence_number = packet.header.sequence
-        else:
-            diff = self._remote_sequence_number - packet.header.sequence
-            if diff <= 16:
-                self._ack_bitfield |= (1 << (diff - 1))
+        if self._remote_sequence_number == -1 or is_sequence_greater(seq, self._remote_sequence_number):
+            diff = seq - self._remote_sequence_number if self._remote_sequence_number != -1 else seq + 1
+            if diff < 16:
+                self._ack_bitfield <<= diff
+            else:
+                self._ack_bitfield = 0 # Gap is too large, reset history
+            self._remote_sequence_number = seq
         
-        # Add the payload to the queue for the application to process
-        self._received_payloads.append(deserialize(packet.payload))
+        # Mark this packet as received in the bitfield
+        diff_from_latest = self._remote_sequence_number - seq
+        if 0 < diff_from_latest <= 16:
+             self._ack_bitfield |= (1 << (diff_from_latest - 1))
+
 
     def _process_acks(self, ack: int, bitfield: int):
         """Removes acknowledged packets from the sent packets buffer."""
@@ -174,7 +189,8 @@ class Connection:
         # The bitfield acknowledges the 16 packets before the main ACK
         for i in range(16):
             if (bitfield >> i) & 1:
-                seq_to_ack = (ack - 1 - i) % 65535
+                # Corrected modulo for proper wrap-around
+                seq_to_ack = (ack - 1 - i) % 65536
                 if seq_to_ack in self._sent_packets:
                     del self._sent_packets[seq_to_ack]
     

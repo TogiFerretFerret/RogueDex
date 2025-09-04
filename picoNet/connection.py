@@ -177,17 +177,15 @@ class Connection:
                 else:
                     self._ack_bitfield = 0 # Gap too large, history is invalid.
             
-            # Mark THIS packet (the new latest) as received in the first bit.
-            self._ack_bitfield |= 1
-            
-            # Update the latest sequence number.
+            # The new latest packet is NOT represented in the bitfield, it's represented
+            # by the ack number itself. We simply update the latest sequence number.
             self._remote_sequence_number = seq
         else:
             # This packet is older than our latest, but we haven't seen it before.
             # Mark its corresponding bit in the bitfield.
             diff = self._remote_sequence_number - seq
             if diff <= 16:
-                self._ack_bitfield |= (1 << diff)
+                self._ack_bitfield |= (1 << (diff - 1))
 
 
     def _process_acks(self, ack: int, bitfield: int):

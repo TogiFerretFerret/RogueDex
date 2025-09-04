@@ -57,7 +57,9 @@ class TestSerializer(unittest.TestCase):
         malformed data that is not valid MessagePack.
         """
         print("\nRunning test_deserialize_invalid_data...")
-        invalid_data = b'this is not msgpack data'
+        # A msgpack map header indicating 1 key-value pair, but only providing a key.
+        # This is structurally invalid and will cause an UnpackException.
+        invalid_data = b'\x81\xa1a'
 
         # Verify that the expected exception is raised
         with self.assertRaises(msgpack.UnpackException):

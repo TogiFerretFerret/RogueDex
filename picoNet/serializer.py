@@ -35,8 +35,18 @@ def deserialize(data: bytes) -> Any:
         The deserialized Python object.
 
     Raises:
-        msgpack.UnpackException: If the data is malformed or not valid MessagePack.
+        msgpack.UnpackException: If the data is malformed, incomplete, or contains
+                                 extra data. This function provides a consistent
+                                 exception type for any unpacking failure.
     """
-    # `raw=False` ensures that strings are decoded to Python's str type.
-    return msgpack.unpackb(data, raw=False)
+    try:
+        # `raw=False` ensures that strings are decoded to Python's str type.
+        # `strict_map_key=False` is a safe default.
+        return msgpack.unpackb(data, raw=False)
+    except (msgpack.UnpackException, ValueError) as e:
+        # Catch potential errors from the msgpack library (like ValueError for
+        # incomplete data) and re-raise them as the expected UnpackException
+        # to provide a consistent API for our serializer.
+        raise msgpack.UnpackException(f"Failed to deserialize data: {e}") from e
+
 

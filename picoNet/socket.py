@@ -1,91 +1,83 @@
 """
 picoNet/socket.py
 
-Provides a high-level, non-blocking UDP socket wrapper for sending and
-receiving raw datagrams.
+A high-level wrapper around Python's native UDP socket functionality.
+This class handles the creation and configuration of a non-blocking socket,
+which is essential for real-time applications like games.
 """
 
 import socket
-from typing import Optional, Tuple
 
 class PicoSocket:
-    """
-    A simple wrapper around a non-blocking UDP socket.
-    """
+    """A non-blocking UDP socket wrapper."""
+
     def __init__(self, host: str, port: int):
         """
-        Initializes and binds the UDP socket.
+        Creates and binds a non-blocking UDP socket.
 
         Args:
-            host: The hostname or IP address to bind to.
-            port: The port to bind to. A port of 0 will let the OS
-                  pick an ephemeral port, which is useful for clients.
+            host: The IP address to bind to.
+            port: The port to bind to. Use 0 to let the OS choose a port.
         """
-        self.host = host
-        self.port = port
-        self.socket: Optional[socket.socket] = None
-        self._buffer_size = 4096  # 4KB buffer, ample for our packet size
-
+        self.socket = None
         try:
-            # Create a UDP socket (AF_INET for IPv4, SOCK_DGRAM for UDP)
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            # Set the socket to non-blocking mode. This is crucial for games,
-            # as it prevents the program from halting while waiting for data.
+            # Set the socket to be non-blocking. This is crucial.
             self.socket.setblocking(False)
-            # Bind the socket to the specified host and port
-            self.socket.bind((self.host, self.port))
+            # --- FIX: Allow address reuse ---
+            # This prevents "Address already in use" errors in rapid testing.
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.socket.bind((host, port))
             print(f"PicoSocket bound to {self.socket.getsockname()}")
-        except socket.error as e:
+        except OSError as e:
             print(f"Error creating or binding socket: {e}")
+            if self.socket:
+                self.socket.close()
             self.socket = None
 
-    def send(self, address: Tuple[str, int], data: bytes):
+    def send(self, address: tuple, data: bytes):
         """
-        Sends data to a specific address.
+        Sends data to a specified address.
 
         Args:
-            address: A tuple containing the (host, port) of the recipient.
-            data: The bytes to be sent.
+            address: A (host, port) tuple for the destination.
+            data: The bytes to send.
         """
         if not self.socket:
             return
-        try:
-            self.socket.sendto(data, address)
-        except socket.error as e:
-            # In a non-blocking socket, a "send" can fail if the network buffer
-            # is full. In a real game, we'd handle this more gracefully.
-            print(f"Error sending data: {e}")
+        self.socket.sendto(data, address)
 
-    def receive(self) -> Optional[Tuple[bytes, Tuple[str, int]]]:
+    def receive(self) -> tuple[bytes, tuple] | None:
         """
         Receives data from the socket.
 
-        Since the socket is non-blocking, this will return None if there is
-        no data to be read.
-
         Returns:
-            A tuple containing (data, address) if data was received,
+            A tuple containing (data, address) if data is available,
             otherwise None.
         """
         if not self.socket:
             return None
         try:
-            data, address = self.socket.recvfrom(self._buffer_size)
+            # A large buffer size is fine for UDP.
+            data, address = self.socket.recvfrom(65535)
             return data, address
         except BlockingIOError:
-            # This is the expected exception when there's no data to read
-            # on a non-blocking socket. We can safely ignore it.
-            return None
-        except socket.error as e:
-            print(f"Error receiving data: {e}")
+            # This is expected when no data is available on a non-blocking socket.
             return None
 
+    def get_address(self) -> tuple | None:
+        """
+        --- NEW: Returns the address the socket is bound to. ---
+        """
+        if not self.socket:
+            return None
+        return self.socket.getsockname()
+
     def close(self):
-        """
-        Closes the socket.
-        """
+        """Closes the socket."""
         if self.socket:
             print("Closing PicoSocket.")
             self.socket.close()
             self.socket = None
+
 

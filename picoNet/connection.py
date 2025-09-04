@@ -8,11 +8,24 @@ user-facing API for the picoNet library.
 
 import time
 import collections
+from enum import Enum, auto
 from typing import Dict, List, Optional, Tuple, Any
 
 from .socket import PicoSocket
 from .packet import Packet, PacketHeader, pack_packet, unpack_packet
 from .serializer import serialize, deserialize
+
+# --- Constants for the handshake protocol ---
+HANDSHAKE_CHALLENGE = b'\xDE\xAD\xBE\xEF'
+HANDSHAKE_RESPONSE = b'\xCA\xFE\xBA\xBE'
+HANDSHAKE_TIMEOUT = 5.0
+HANDSHAKE_RESEND_INTERVAL = 1.0
+
+class ConnectionState(Enum):
+    """Represents the different states of the connection."""
+    DISCONNECTED = auto()
+    CONNECTING = auto()
+    CONNECTED = auto()
 
 def is_sequence_greater(s1: int, s2: int) -> bool:
     """
@@ -36,14 +49,15 @@ class Connection:
             port: The port of the remote host.
         """
         self.remote_address = (host, port)
-        # We bind to port 0 to let the OS choose an ephemeral port for us.
         self._socket = PicoSocket('0.0.0.0', 0)
 
         # Connection State
-        self.is_connected = False
+        self.state = ConnectionState.DISCONNECTED
         self.timeout = 5.0  # Seconds before considering a connection timed out
         self.last_receive_time = 0.0
         self.rtt = 0.1  # Smoothed Round-Trip Time, starts at 100ms
+        self._handshake_start_time = 0.0
+        self._last_handshake_send_time = 0.0
 
         # Packet Sequencing (Outgoing)
         self._sequence_number = 0
@@ -53,55 +67,54 @@ class Connection:
         self._ack_bitfield = 0
 
         # Reliability Management
-        # A dictionary to store reliable packets that have been sent but not yet ACKed.
-        # {sequence_number: (send_time, packed_packet_data)}
         self._sent_packets: Dict[int, Tuple[float, bytes]] = {}
-
-        # A set to keep track of the sequence numbers of received packets to avoid duplicates.
         self._received_sequences: collections.deque = collections.deque(maxlen=32)
-
-        # A queue for payloads received from the remote host that are ready to be
-        # processed by the application layer.
         self._received_payloads: collections.deque = collections.deque()
+
+    @property
+    def is_connected(self) -> bool:
+        """Returns True if the connection state is CONNECTED."""
+        return self.state == ConnectionState.CONNECTED
 
     def connect(self):
         """
-        Establishes the connection with the remote host.
-        (For now, this is a placeholder. A real implementation would have a
-        handshake protocol.)
+        Begins the connection process by sending a handshake challenge.
+        The connection is not established until a response is received, which is
+        handled in the update() loop.
         """
-        print(f"Attempting to 'connect' to {self.remote_address}...")
-        self.is_connected = True
-        self.last_receive_time = time.time()
+        if self.state != ConnectionState.DISCONNECTED:
+            return
+
+        print(f"Starting connection handshake with {self.remote_address}...")
+        self.state = ConnectionState.CONNECTING
+        self._handshake_start_time = time.time()
+        self._send_handshake_challenge()
+
+    def _send_handshake_challenge(self):
+        """Sends the initial handshake packet."""
+        self._socket.send(self.remote_address, HANDSHAKE_CHALLENGE)
+        self._last_handshake_send_time = time.time()
 
     def send(self, payload: Any):
         """
-        Serializes and sends a payload to the remote host.
+        Serializes and sends a payload to the remote host. Only works if the
+        connection is fully established.
         """
-        if not self.is_connected:
+        if self.state != ConnectionState.CONNECTED:
             return
 
-        # Sanitize the ack number for packing. -1 is a sentinel value for
-        # "no packets received yet" and is invalid for an unsigned short.
         ack_to_send = self._remote_sequence_number if self._remote_sequence_number != -1 else 0
-
         header = PacketHeader(
-            protocol_id=12345, # Our project's magic number
+            protocol_id=12345,
             sequence=self._sequence_number,
             ack=ack_to_send,
             ack_bitfield=self._ack_bitfield
         )
         packet = Packet(header=header, payload=serialize(payload))
         packed_data = pack_packet(packet)
-
         self._socket.send(self.remote_address, packed_data)
-
-        # Store the packet for reliability tracking
         self._sent_packets[self._sequence_number] = (time.time(), packed_data)
-        
-        # Increment sequence number, handling wrap-around
         self._sequence_number = (self._sequence_number + 1) % 65536
-
 
     def receive(self) -> List[Any]:
         """
@@ -114,30 +127,68 @@ class Connection:
     def update(self, dt: float):
         """
         The main update loop for the connection. This must be called regularly.
-        It handles receiving packets, processing ACKs, and resending lost packets.
-
-        Args:
-            dt: The time delta since the last update call.
         """
-        if not self.is_connected:
-            return
+        # Handle state-specific logic
+        if self.state == ConnectionState.DISCONNECTED:
+            pass # But still listen for new connections
+        
+        if self.state == ConnectionState.CONNECTING:
+            if time.time() - self._handshake_start_time > HANDSHAKE_TIMEOUT:
+                print("Handshake timed out.")
+                self.state = ConnectionState.DISCONNECTED
+                return
+            if time.time() - self._last_handshake_send_time > HANDSHAKE_RESEND_INTERVAL:
+                self._send_handshake_challenge()
+        
+        if self.state == ConnectionState.CONNECTED:
+            if time.time() - self.last_receive_time > self.timeout:
+                print("Connection timed out.")
+                self.state = ConnectionState.DISCONNECTED
+                return
 
-        # 1. Check for connection timeout
-        if time.time() - self.last_receive_time > self.timeout:
-            print("Connection timed out.")
-            self.is_connected = False
-            return
+        # Receive all incoming packets from the socket
+        self._receive_packets()
 
-        # 2. Receive all incoming packets from the socket
+        # If connected, resend any lost packets
+        if self.state == ConnectionState.CONNECTED:
+            self._resend_lost_packets()
+    
+    def _receive_packets(self):
+        """Internal helper to process all data waiting on the socket."""
         while True:
             received = self._socket.receive()
             if received is None:
-                break # No more data to read
+                break
 
             data, address = received
-            if address != self.remote_address:
-                continue # Ignore packets from unknown sources
+            
+            # For the server-side, a DISCONNECTED state can accept a new connection.
+            if self.state == ConnectionState.DISCONNECTED:
+                if data == HANDSHAKE_CHALLENGE:
+                    print(f"Received handshake challenge from {address}. Sending response.")
+                    # A "server" learns its client's address from the challenge.
+                    self.remote_address = address 
+                    self._socket.send(self.remote_address, HANDSHAKE_RESPONSE)
+                    self.state = ConnectionState.CONNECTED
+                    self.last_receive_time = time.time()
+                    # Reset sequence numbers for this new connection
+                    self._remote_sequence_number = -1 
+                    self._sequence_number = 0
+                continue
 
+            # A client or established connection must come from the known address.
+            if address != self.remote_address:
+                continue
+
+            # If we are in the connecting state, we only care about the response
+            if self.state == ConnectionState.CONNECTING:
+                if data == HANDSHAKE_RESPONSE:
+                    print("Handshake successful. Connection established.")
+                    self.state = ConnectionState.CONNECTED
+                    self.last_receive_time = time.time()
+                continue
+
+            # If we are connected, process the full packet
             try:
                 packet = unpack_packet(data)
                 self.last_receive_time = time.time()
@@ -146,80 +197,53 @@ class Connection:
                 print("Received a malformed packet.")
                 continue
 
-        # 3. Resend any lost packets
-        self._resend_lost_packets()
-
-
     def _process_received_packet(self, packet: Packet):
-        """Processes a single, valid packet received from the remote host."""
+        """Processes a single, valid, application-level packet."""
         seq = packet.header.sequence
-        
-        # First, always process the ACK field of any incoming packet. It might
-        # contain new information about packets we've sent.
         self._process_acks(packet.header.ack, packet.header.ack_bitfield)
 
-        # Now, handle the payload of the incoming packet. If we've already
-        # processed this sequence number, it's a duplicate, so we can ignore it.
         if seq in self._received_sequences:
             return
         
         self._received_sequences.append(seq)
         self._received_payloads.append(deserialize(packet.payload))
 
-        # Finally, update our own ACK state to reflect that we received THIS packet.
         if self._remote_sequence_number == -1 or is_sequence_greater(seq, self._remote_sequence_number):
-            # This packet is the new "latest" packet we've seen.
-            # Shift the bitfield based on the jump from the previous latest.
             if self._remote_sequence_number != -1:
                 diff = seq - self._remote_sequence_number
                 if diff <= 16:
-                    self._ack_bitfield <<= diff
+                    self._ack_bitfield = (self._ack_bitfield << diff) | (1 << (diff - 1))
                 else:
-                    self._ack_bitfield = 0 # Gap too large, history is invalid.
-            
-            # The new latest packet is NOT represented in the bitfield, it's represented
-            # by the ack number itself. We simply update the latest sequence number.
+                    self._ack_bitfield = 0
             self._remote_sequence_number = seq
         else:
-            # This packet is older than our latest, but we haven't seen it before.
-            # Mark its corresponding bit in the bitfield.
             diff = self._remote_sequence_number - seq
             if diff <= 16:
                 self._ack_bitfield |= (1 << (diff - 1))
 
-
     def _process_acks(self, ack: int, bitfield: int):
         """Removes acknowledged packets from the sent packets buffer."""
-        # The main ACK number acknowledges the latest packet they received
         if ack in self._sent_packets:
             del self._sent_packets[ack]
-        
-        # The bitfield acknowledges the 16 packets before the main ACK
         for i in range(16):
             if (bitfield >> i) & 1:
-                # Corrected modulo for proper wrap-around
                 seq_to_ack = (ack - 1 - i) % 65536
                 if seq_to_ack in self._sent_packets:
                     del self._sent_packets[seq_to_ack]
     
     def _resend_lost_packets(self):
         """Iterates through sent packets and resends those that are likely lost."""
-        # A simple loss detection: if a packet hasn't been ACKed after 1.5x the RTT,
-        # assume it's lost and resend it.
         timeout_threshold = self.rtt * 1.5 
         now = time.time()
         for seq, (sent_time, data) in list(self._sent_packets.items()):
             if now - sent_time > timeout_threshold:
                 print(f"Resending likely lost packet: {seq}")
                 self._socket.send(self.remote_address, data)
-                # We should update the sent_time to avoid resending in a tight loop
                 self._sent_packets[seq] = (now, data)
 
-
     def close(self):
-        """
-        Closes the underlying socket.
-        """
+        """Closes the underlying socket."""
+        self.state = ConnectionState.DISCONNECTED
         self._socket.close()
 
 

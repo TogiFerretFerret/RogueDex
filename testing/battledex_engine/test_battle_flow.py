@@ -9,7 +9,7 @@ import sys
 import os
 from typing import List, Dict, Any, Callable
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-
+sys.path.insert(0, project_root)
 from battledex_engine.battle import Battle
 from battledex_engine.state import BattleState, TeamState, CombatantState
 from battledex_engine.interfaces import Action, Ruleset, Combatant

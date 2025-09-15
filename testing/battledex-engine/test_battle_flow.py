@@ -9,8 +9,13 @@ import sys
 import os
 from typing import List, Dict, Any, Callable
 
-# Add the root project directory to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+# --- Path Setup ---
+# This block of code is crucial for ensuring that the test script can find
+# the 'battledex_engine' library. It calculates the absolute path to the
+# project's root directory and adds it to Python's import path.
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from battledex_engine.battle import Battle
 from battledex_engine.state import BattleState, TeamState, CombatantState
@@ -127,4 +132,5 @@ class TestBattleFlow(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 

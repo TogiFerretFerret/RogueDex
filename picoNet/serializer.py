@@ -1,5 +1,5 @@
 """
-picoNet/custom_serializer.py
+picoNet/serializer.py
 
 A hyper-optimized, custom binary serializer for RogueDex game commands.
 This serializer is designed to be a drop-in replacement for the msgpack-based
@@ -50,12 +50,6 @@ KNOWN_KEYS_INV = {v: k for k, v in KNOWN_KEYS.items()}
 def serialize(data: dict) -> bytes:
     """
     Serializes a Python dictionary into our custom compact byte format.
-
-    Args:
-        data: A dictionary containing game command data.
-
-    Returns:
-        A byte string representing the serialized data.
     """
     if not isinstance(data, dict):
         raise TypeError("Top-level object for this serializer must be a dictionary.")
@@ -65,19 +59,15 @@ def serialize(data: dict) -> bytes:
     stream.write(struct.pack('>H', len(data)))
 
     for key, value in data.items():
-        # --- The Key Optimization ---
-        # Check if the key is one of our special, optimized keys.
         if key in KNOWN_KEYS:
             stream.write(bytes([TAG_KNOWN_KEY]))
             stream.write(bytes([KNOWN_KEYS[key]]))
         else:
-            # Fallback for any unknown keys, making the format expandable.
             stream.write(bytes([TAG_UNKNOWN_KEY]))
             encoded_key = key.encode('utf-8')
             stream.write(struct.pack('>H', len(encoded_key)))
             stream.write(encoded_key)
 
-        # Serialize the value using the recursive helper
         _serialize_value(stream, value)
 
     return stream.getvalue()
@@ -105,8 +95,8 @@ def _serialize_value(stream, value):
         for item in value:
             _serialize_value(stream, item)
     elif isinstance(value, dict):
-        # Allow nested dictionaries by calling back to the main serialize function
-        # This gives them the same key-optimization benefits.
+        # For nested dictionaries, we call the main serialize logic, which
+        # correctly prefixes the data with a dictionary tag and length.
         nested_data = serialize(value)
         stream.write(nested_data)
     else:
@@ -118,11 +108,17 @@ def deserialize(data: bytes) -> dict:
     Deserializes a byte string from our custom format into a Python dictionary.
     """
     stream = io.BytesIO(data)
-    main_tag = stream.read(1)[0]
-
-    if main_tag != TAG_DICT:
+    tag = stream.read(1)[0]
+    if tag != TAG_DICT:
         raise ValueError("Data stream does not start with a dictionary tag.")
+    return _deserialize_dict_from_stream(stream)
 
+
+def _deserialize_dict_from_stream(stream: io.BytesIO) -> dict:
+    """
+    Helper that reads dictionary content from a stream, assuming the TAG_DICT
+    has already been consumed.
+    """
     try:
         num_items = struct.unpack('>H', stream.read(2))[0]
         result_dict = {}
@@ -139,7 +135,7 @@ def deserialize(data: bytes) -> dict:
                 key = stream.read(key_length).decode('utf-8')
             else:
                 raise ValueError(f"Invalid or unknown key tag '{key_tag}' in stream.")
-            
+
             value = _deserialize_value(stream)
             result_dict[key] = value
         return result_dict
@@ -149,12 +145,11 @@ def deserialize(data: bytes) -> dict:
 
 def _deserialize_value(stream):
     """Helper function to recursively deserialize a value from the stream."""
-    # We peek at the next byte to see what type it is.
     tag_byte = stream.read(1)
     if not tag_byte:
         raise ValueError("Incomplete stream: trying to read a value tag.")
     tag = tag_byte[0]
-    
+
     if tag == TAG_NULL:
         return None
     if tag == TAG_BOOL_FALSE:
@@ -172,13 +167,9 @@ def _deserialize_value(stream):
         num_items = struct.unpack('>H', stream.read(2))[0]
         return [_deserialize_value(stream) for _ in range(num_items)]
     if tag == TAG_DICT:
-        # If we find a nested dictionary, we need to deserialize it fully.
-        # This requires knowing its length, which is a bit tricky.
-        # For now, we'll put the tag back and deserialize from the parent.
-        # A more robust solution might require length-prefixing dictionaries.
-        stream.seek(stream.tell() - 1) # Rewind the stream by one byte
-        return deserialize(stream.read()) # Consume the rest of the stream
-    
+        # A nested dictionary. The TAG_DICT has been read by this point.
+        return _deserialize_dict_from_stream(stream)
+
     raise ValueError(f"Unknown type tag in stream: {tag}")
 
 

@@ -26,8 +26,16 @@ def create_move_from_data(move_name: str, move_data_map: Dict[str, MoveData]) ->
     Raises:
         KeyError: if the move_name is not found in the data map.
     """
-    # --- To be implemented ---
-    pass
+    data = move_data_map[move_name]
+    return Move(
+        name=move_name,
+        move_type=data.get("move_type"),
+        category=data.get("category"),
+        power=data.get("power"),
+        accuracy=data.get("accuracy"),
+        pp=data.get("pp"),
+        _priority=data.get("priority", 0)
+    )
 
 def create_pokemon_from_data(
     species_name: str,
@@ -53,6 +61,19 @@ def create_pokemon_from_data(
     Returns:
         An instance of the Pokemon class.
     """
-    # --- To be implemented ---
-    pass
+    pokemon_data = pokemon_data_map[species_name]
+    
+    # Create the move objects for this Pokemon
+    pokemon_moves = [create_move_from_data(name, move_data_map) for name in move_names]
+
+    return Pokemon(
+        _id=instance_id,
+        species_name=species_name,
+        level=level,
+        types=pokemon_data.get("types", []),
+        base_stats=pokemon_data.get("base_stats", {}),
+        moves=pokemon_moves,
+        _is_active=is_active,
+    )
+
 

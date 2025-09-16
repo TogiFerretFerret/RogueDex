@@ -16,23 +16,24 @@ class Pokemon(Combatant):
     """
     Represents a single Pokemon instance. Implements the Combatant interface.
     """
+    # --- Fields without default values must come first ---
     _id: str
-    _is_active: bool = False
-    
-    # Core Pokemon Attributes
     species_name: str
     level: int
     types: List[str]
     base_stats: Dict[str, int]
     moves: List[Move]
     
-    # Battle-specific state
-    current_hp: int = field(init=False)
-    stats: Dict[str, int] = field(init=False)
+    # --- Fields with default values ---
+    _is_active: bool = False
     status: Optional[str] = None
     stat_stages: Dict[str, int] = field(default_factory=lambda: {
         "attack": 0, "defense": 0, "sp_attack": 0, "sp_defense": 0, "speed": 0
     })
+
+    # --- Fields that are calculated, not passed to the constructor ---
+    current_hp: int = field(init=False)
+    stats: Dict[str, int] = field(init=False)
 
     def __post_init__(self):
         """Calculate final stats after the object is created."""
@@ -59,4 +60,5 @@ class Pokemon(Combatant):
             "sp_defense": int(((2 * self.base_stats["sp_defense"]) * self.level) / 100 + 5),
             "speed": int(((2 * self.base_stats["speed"]) * self.level) / 100 + 5),
         }
+
 

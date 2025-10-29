@@ -18,7 +18,9 @@ primary    -> NUMBER | STRING | "True" | "False" | "nil"
            |  "(" expression ")"
 """
 
-from .token_types import TokenType, Token
+from .token_types import TokenType
+# Import Token from lexer.py, not token_types.py
+from .lexer import Token
 from . import ast_nodes as ast
 from .errors import ParseError
 
@@ -161,4 +163,5 @@ class Parser:
         else:
             err_msg = f"at '{token.value}'" if token.value else f"at '{token.type.name}'"
             return ParseError(f"{err_msg} - {message}", token.line)
+
 

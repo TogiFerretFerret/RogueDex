@@ -6,7 +6,8 @@ with the AST (e.g., for printing, compiling, or interpreting).
 """
 
 from abc import ABC, abstractmethod
-from .token_types import Token
+# Import Token from lexer.py, not token_types.py
+from .lexer import Token
 
 # --- Visitor Pattern ---
 # This is the magic. Any class that wants to "walk" the AST
@@ -103,4 +104,5 @@ class Grouping(Expr):
     
     def accept(self, visitor: ExprVisitor):
         return visitor.visit_grouping_expr(self)
+
 

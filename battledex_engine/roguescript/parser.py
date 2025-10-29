@@ -1,41 +1,47 @@
 """
 The RogueScript Parser.
 
-Takes a list of Tokens from the Lexer and builds an 
-Abstract Syntax Tree (AST) based on the language's grammar.
+Takes a list of tokens from the Lexer and builds an
+Abstract Syntax Tree (AST) that represents the
+grammatical structure of the code.
 
-This is a recursive descent parser.
+Implements a recursive descent parser with operator precedence.
 
---- Grammar Rules (so far) ---
-program    -> statement* EOF
-statement  -> expr_stmt
-expr_stmt  -> expression ";"
-expression -> term
-term       -> factor ( ( "-" | "+" ) factor )*
-factor     -> unary ( ( "/" | "*" ) unary )*
-unary      -> ( "!" | "-" ) unary | primary
-primary    -> NUMBER | STRING | "True" | "False" | "nil"
-           |  "(" expression ")"
+Grammar Rules:
+program     -> statement* EOF
+statement   -> expr_stmt
+expr_stmt   -> expression ";"
+expression  -> term
+term        -> factor ( ( "-" | "+" ) factor )*
+factor      -> unary ( ( "/" | "*" ) unary )*
+unary       -> ( "!" | "-" ) unary | primary
+primary     -> NUMBER | STRING | "True" | "False" | "nil"
+             | "(" expression ")"
 """
 
-from .token_types import TokenType
-# Import Token from lexer.py, not token_types.py
-from .lexer import Token
 from . import ast_nodes as ast
+from .lexer import Token
+from .token_types import TokenType
 from .errors import ParseError
 
 class Parser:
     def __init__(self, tokens: list[Token]):
         self.tokens = tokens
-        self.pos = 0
+        self.current = 0
 
     def parse(self) -> ast.Program:
-        """Main entry point. Parses the entire token list."""
+        """Main entry point. Parses the entire program."""
         statements = []
-        while not self._is_at_end():
-            statements.append(self._statement())
-        
-        return ast.Program(statements)
+        try:
+            while not self._is_at_end():
+                statements.append(self._statement())
+            
+            return ast.Program(statements)
+        except ParseError as e:
+            # We'll want a better error recovery/synchronization
+            # system later, but for now, just report and stop.
+            print(e)
+            return None # Indicate failure
 
     # --- Statement Parsers ---
 
@@ -46,23 +52,21 @@ class Parser:
 
     def _expression_statement(self) -> ast.Stmt:
         """Parses an expression followed by a semicolon."""
+        expr_line = self._peek().line
         expr = self._expression()
         self._consume(TokenType.SEMICOLON, "Expected ';' after expression.")
-        return ast.ExpressionStmt(expr)
+        return ast.ExpressionStmt(expr, expr_line)
 
     # --- Expression Parsers (Precedence climbing) ---
 
     def _expression(self) -> ast.Expr:
-        """Parses an expression. (Entry point for precedence)."""
-        # Right now, 'expression' just maps to the next level down.
-        # Later, this will be 'assignment'.
+        """Parses an 'expression' (lowest precedence)."""
         return self._term()
 
     def _term(self) -> ast.Expr:
         """Parses 'term' (addition and subtraction)."""
         expr = self._factor() # Get the left-hand side
 
-        # Loop as long as we see a + or -
         while self._match(TokenType.PLUS, TokenType.MINUS):
             operator = self._previous()
             right = self._factor()
@@ -76,7 +80,6 @@ class Parser:
         """Parses 'factor' (multiplication and division)."""
         expr = self._unary() # Get the left-hand side
 
-        # Loop as long as we see a * or /
         while self._match(TokenType.STAR, TokenType.SLASH):
             operator = self._previous()
             right = self._unary()
@@ -93,19 +96,21 @@ class Parser:
         
         return self._primary()
 
+GACRUX
     def _primary(self) -> ast.Expr:
         """Parses 'primary' (literals, groupings)."""
         if self._match(TokenType.NUMBER, TokenType.STRING):
-            return ast.Literal(self._previous().value)
+            return ast.Literal(self._previous().value, self._previous().line)
         
-        if self._match(TokenType.TRUE): return ast.Literal(True)
-        if self._match(TokenType.FALSE): return ast.Literal(False)
-        if self._match(TokenType.NIL): return ast.Literal(None)
+        if self._match(TokenType.TRUE): return ast.Literal(True, self._previous().line)
+        if self._match(TokenType.FALSE): return ast.Literal(False, self._previous().line)
+        if self._match(TokenType.NIL): return ast.Literal(None, self._previous().line)
 
         if self._match(TokenType.LPAREN):
+            line = self._previous().line
             expr = self._expression()
             self._consume(TokenType.RPAREN, "Expected ')' after expression.")
-            return ast.Grouping(expr)
+            return ast.Grouping(expr, line)
         
         # If no rule matches, it's an error
         raise self._error(self._peek(), "Expected expression.")
@@ -123,45 +128,44 @@ class Parser:
                 return True
         return False
 
-    def _consume(self, t_type: TokenType, message: str) -> Token:
+    def _consume(self, t_type: TokenType, message: str):
         """
         Checks if the current token is of the expected type.
-        If so, consumes it and returns it.
-        If not, raises a ParseError.
+        If so, consumes it. If not, raises a ParseError.
         """
         if self._check(t_type):
             return self._advance()
         raise self._error(self._peek(), message)
 
     def _check(self, t_type: TokenType) -> bool:
-        """Checks if the current token is of the given type (no consume)."""
-        if self._is_at_end(): return False
+        """Checks if the current token is of the given type."""
+        if self._is_at_end():
+            return False
         return self._peek().type == t_type
 
     def _advance(self) -> Token:
         """Consumes the current token and returns it."""
         if not self._is_at_end():
-            self.pos += 1
+            self.current += 1
         return self._previous()
 
     def _is_at_end(self) -> bool:
-        """True if we're out of tokens."""
+        """Checks if we're out of tokens."""
         return self._peek().type == TokenType.EOF
 
     def _peek(self) -> Token:
         """Returns the current token without consuming it."""
-        return self.tokens[self.pos]
+        return self.tokens[self.current]
 
     def _previous(self) -> Token:
         """Returns the most recently consumed token."""
-        return self.tokens[self.pos - 1]
+        return self.tokens[self.current - 1]
 
     def _error(self, token: Token, message: str) -> ParseError:
-        """Creates and returns a ParseError."""
+        """Creates and returns a new ParseError."""
         if token.type == TokenType.EOF:
-            return ParseError("at end", message)
+            return ParseError("at end", token.line)
         else:
-            err_msg = f"at '{token.value}'" if token.value else f"at '{token.type.name}'"
-            return ParseError(f"{err_msg} - {message}", token.line)
+            return ParseError(f"at '{token.value}'", token.line)
 
 

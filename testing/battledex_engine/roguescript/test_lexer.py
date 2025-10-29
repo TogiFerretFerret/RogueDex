@@ -4,12 +4,15 @@ Unit tests for the RogueScript Lexer.
 To run (from the top-level RogueDex/ directory):
     python -m unittest discover tests
 """
-
+import sys
+import os
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..','..'))
+sys.path.insert(0, project_root)
 import unittest
 
 # This import will work if you run from the root RogueDex/ directory
-from battledex-engine.roguescript.lexer import Lexer, Token
-from battledex-engine.roguescript.token_types import TokenType
+from battledex_engine.roguescript.lexer import Lexer, Token
+from battledex_engine.roguescript.token_types import TokenType
 
 class TestLexer(unittest.TestCase):
 

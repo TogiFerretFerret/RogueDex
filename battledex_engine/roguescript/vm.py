@@ -10,7 +10,7 @@ from .compiler import Compiler, CompileError
 from .parser import Parser, ParseError
 from .lexer import Lexer
 from .errors import RogueScriptRuntimeError
-from enum import Enum
+from enum import Enum, auto
 
 class InterpretResult(Enum):
     OK = auto()

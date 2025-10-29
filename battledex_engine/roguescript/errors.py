@@ -1,24 +1,30 @@
 """
-Custom exceptions for the RogueScript interpreter.
+Central definitions for all custom errors in RogueScript.
 """
 
 class RogueScriptError(Exception):
-    """Base class for all RogueScript errors."""
-    def __init__(self, message, line=None):
-        self.message = message
+    """Base class for all errors in the interpreter."""
+    def __init__(self, message, line):
+        super().__init__(message)
         self.line = line
-    
+
     def __str__(self):
-        if self.line:
-            return f"[Line {self.line}] Error: {self.message}"
-        return f"Error: {self.message}"
+        message = super().__str__()
+        return f"[Line {self.line}] Error: {message}"
 
 class ParseError(RogueScriptError):
-    """Raised when the parser encounters a syntax error."""
-    pass
+    """Error raised by the Parser."""
+    def __init__(self, message, line):
+        super().__init__(message, line)
+
+class CompileError(RogueScriptError):
+    """Error raised by the Compiler."""
+    def __init__(self, message, line):
+        super().__init__(message, line)
 
 class RogueScriptRuntimeError(RogueScriptError):
-    """Raised by the VM during execution."""
-    pass
+    """Error raised by the VM during execution."""
+    def __init__(self, message, line):
+        super().__init__(message, line)
 
 

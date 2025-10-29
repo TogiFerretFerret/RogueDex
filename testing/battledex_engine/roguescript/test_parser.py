@@ -10,9 +10,9 @@ These tests work by:
 
 import unittest
 
-from battledex-engine.roguescript.lexer import Lexer
-from battledex-engine.roguescript.parser import Parser
-from battledex-engine.roguescript.ast_printer import ASTPrinter
+from battledex_engine.roguescript.lexer import Lexer
+from battledex_engine.roguescript.parser import Parser
+from battledex_engine.roguescript.ast_printer import ASTPrinter
 
 class TestParser(unittest.TestCase):
 

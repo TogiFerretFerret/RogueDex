@@ -1,10 +1,3 @@
-"""
-Defines the TokenType enum and KEYWORDS dictionary for RogueScript.
-
-This is in a separate file so that other modules (like Parser) can
-import token types without creating circular dependencies with the Lexer.
-"""
-
 from enum import Enum, auto
 
 class TokenType(Enum):
@@ -14,15 +7,17 @@ class TokenType(Enum):
     IDENTIFIER = auto()   # my_variable, opponent, hp
 
     # --- Keywords ---
+    VAR = auto()          # var
+    PRINT = auto()        # print
     IF = auto()
     ELSE = auto()
     WHILE = auto()
     FOR = auto()
-    DEF = auto()          # For defining functions/strategies
+    DEF = auto()
     RETURN = auto()
     TRUE = auto()
     FALSE = auto()
-    NIL = auto()          # 'nil' or 'null'
+    NIL = auto()
     AND = auto()
     OR = auto()
     NOT = auto()
@@ -54,8 +49,9 @@ class TokenType(Enum):
     # --- Special ---
     EOF = auto()          # End of File
 
-# Dictionary mapping keyword strings to their TokenTypes
 KEYWORDS = {
+    "var": TokenType.VAR,
+    "print": TokenType.PRINT,
     "if": TokenType.IF,
     "else": TokenType.ELSE,
     "while": TokenType.WHILE,
@@ -69,4 +65,5 @@ KEYWORDS = {
     "or": TokenType.OR,
     "not": TokenType.NOT,
 }
+
 

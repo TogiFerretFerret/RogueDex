@@ -1,3 +1,18 @@
-from .token_types import TokenType
-from .lexer import Token, Lexer
+"""
+RogueScript: A simple, bytecode-compiled scripting language
+for the RogueDex battledex-engine.
+"""
+
+from .vm import VirtualMachine, InterpretResult
+from .errors import RogueScriptError, ParseError, CompileError, RogueScriptRuntimeError
+
+__all__ = [
+    "VirtualMachine",
+    "InterpretResult",
+    "RogueScriptError",
+    "ParseError",
+    "CompileError",
+    "RogueScriptRuntimeError",
+]
+
 

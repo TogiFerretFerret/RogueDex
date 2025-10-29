@@ -32,16 +32,13 @@ class Parser:
     def parse(self) -> ast.Program:
         """Main entry point. Parses the entire program."""
         statements = []
-        try:
-            while not self._is_at_end():
-                statements.append(self._statement())
-            
-            return ast.Program(statements)
-        except ParseError as e:
-            # We'll want a better error recovery/synchronization
-            # system later, but for now, just report and stop.
-            print(e)
-            return None # Indicate failure
+        # REMOVED the try...except block.
+        # We want ParseErrors to propagate up to the caller (e.g., the VM)
+        # which is responsible for error handling.
+        while not self._is_at_end():
+            statements.append(self._statement())
+        
+        return ast.Program(statements)
 
     # --- Statement Parsers ---
 
@@ -96,7 +93,6 @@ class Parser:
         
         return self._primary()
 
-GACRUX
     def _primary(self) -> ast.Expr:
         """Parses 'primary' (literals, groupings)."""
         if self._match(TokenType.NUMBER, TokenType.STRING):
@@ -167,5 +163,6 @@ GACRUX
             return ParseError("at end", token.line)
         else:
             return ParseError(f"at '{token.value}'", token.line)
+
 
 

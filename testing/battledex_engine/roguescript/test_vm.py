@@ -7,7 +7,7 @@ check the final result.
 """
 
 import unittest
-from battledex_engine.roguescript.vm import VirtualMachine, InterpretResult
+from battledex-engine.roguescript.vm import VirtualMachine, InterpretResult
 
 class TestVM(unittest.TestCase):
 
@@ -62,25 +62,16 @@ class TestVM(unittest.TestCase):
         result, value = self._run_script("1 / 0;")
         self.assertEqual(result, InterpretResult.RUNTIME_ERROR)
 
-    def test_stack_overflow(self):
-        """Test for stack overflow (a bit hacky)."""
-        # This is a bit of a hack. We're manually setting the stack
-        # to be almost full before running a script.
-        self.vm.stack = [0] * (self.vm.STACK_MAX - 1)
+    def test_compile_error_parse(self):
+        """Tests that a parse error returns a COMPILE_ERROR result."""
+        # This test was misnamed 'test_stack_overflow'
         
-        # This '1 + 2' will push 1, push 2, add, then push result.
-        # The 'push 2' should be the one to fail.
-        # (This test is fragile, depends on impl details)
-        
-        # A better test: make a script that pushes, but doesn't pop.
-        # We can't do that without functions or loops yet.
-        # For now, we'll just test the compile error.
-        
-        # A better test for now is a compile error
-        result, value = self._run_script("1 + (2");
+        # This code is missing a ')' and will fail to parse.
+        result, value = self._run_script("1 + (2;");
         self.assertEqual(result, InterpretResult.COMPILE_ERROR)
 
 
 if __name__ == '__main__':
     unittest.main()
+
 

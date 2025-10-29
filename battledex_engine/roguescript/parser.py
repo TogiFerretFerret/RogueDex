@@ -109,7 +109,8 @@ class Parser:
             return ast.Grouping(expr, line)
         
         # If no rule matches, it's an error
-        raise self._error(self._peek(), "Expected expression.")
+        # Removed the period from the message to match the test
+        raise self._error(self._peek(), "Expected expression")
 
     # --- Parser Helper Methods ---
 
@@ -159,10 +160,11 @@ class Parser:
 
     def _error(self, token: Token, message: str) -> ParseError:
         """Creates and returns a new ParseError."""
+        # This is the fix: We now include the 'message'
+        # in the error string.
         if token.type == TokenType.EOF:
-            return ParseError("at end", token.line)
+            return ParseError(f"{message} (at end)", token.line)
         else:
-            return ParseError(f"at '{token.value}'", token.line)
-
+            return ParseError(f"{message} (at '{token.value}')", token.line)
 
 

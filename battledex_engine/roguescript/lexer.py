@@ -129,30 +129,30 @@ class Lexer:
             if self.current_char == '=':
                 if self.peek() == '=':
                     self.advance(); self.advance()
-                    return Token(TokenType.EQUAL_EQUAL, line=self.line)
+                    return Token(TokenType.EQUAL_EQUAL, "==", line=self.line)
                 self.advance()
-                return Token(TokenType.EQUALS, line=self.line)
+                return Token(TokenType.EQUALS, "=", line=self.line)
 
             if self.current_char == '!':
                 if self.peek() == '=':
                     self.advance(); self.advance()
-                    return Token(TokenType.BANG_EQUAL, line=self.line)
+                    return Token(TokenType.BANG_EQUAL, "!=", line=self.line)
                 self.advance()
-                return Token(TokenType.BANG, line=self.line)
+                return Token(TokenType.BANG, "!", line=self.line)
 
             if self.current_char == '>':
                 if self.peek() == '=':
                     self.advance(); self.advance()
-                    return Token(TokenType.GREATER_EQUAL, line=self.line)
+                    return Token(TokenType.GREATER_EQUAL, ">=", line=self.line)
                 self.advance()
-                return Token(TokenType.GREATER, line=self.line)
+                return Token(TokenType.GREATER, ">", line=self.line)
             
             if self.current_char == '<':
                 if self.peek() == '=':
                     self.advance(); self.advance()
-                    return Token(TokenType.LESS_EQUAL, line=self.line)
+                    return Token(TokenType.LESS_EQUAL, "<=", line=self.line)
                 self.advance()
-                return Token(TokenType.LESS, line=self.line)
+                return Token(TokenType.LESS, "<", line=self.line)
 
             # --- Single-character tokens ---
             token_map = {
@@ -166,8 +166,9 @@ class Lexer:
             
             if self.current_char in token_map:
                 token_type = token_map[self.current_char]
+                op_char = self.current_char # Capture the character
                 self.advance()
-                return Token(token_type, line=self.line)
+                return Token(token_type, op_char, line=self.line) # Pass it as the value
 
             raise Exception(f"Line {self.line}: Invalid character '{self.current_char}'")
 
@@ -182,4 +183,5 @@ class Lexer:
             if token.type == TokenType.EOF:
                 break
         return tokens
+
 

@@ -105,16 +105,19 @@ class Lexer:
         if token_type == TokenType.IDENTIFIER:
             return Token(token_type, result, self.line)
         else:
-            # It's a keyword, no value needed
-            return Token(token_type, line=self.line)
+            # It's a keyword. Store the keyword string ("if", "while")
+            # as the value for better error messages.
+            return Token(token_type, result, line=self.line)
 
     def get_next_token(self) -> Token:
         """Get the very next token from the stream."""
         while self.current_char is not None:
             
-            if self.current_char.isspace() or self.current_char == '#':
-                self.skip_whitespace_and_comments()
-                continue
+            self.skip_whitespace_and_comments()
+
+            # Handle case where whitespace/comments are at end of file
+            if self.current_char is None:
+                break
 
             if self.current_char.isdigit():
                 return self.get_number()
@@ -127,32 +130,32 @@ class Lexer:
 
             # --- Two-character tokens FIRST ---
             if self.current_char == '=':
-                if self.peek() == '=':
-                    self.advance(); self.advance()
-                    return Token(TokenType.EQUAL_EQUAL, "==", line=self.line)
                 self.advance()
-                return Token(TokenType.EQUALS, "=", line=self.line)
+                if self.current_char == '=':
+                    self.advance()
+                    return Token(TokenType.EQUAL_EQUAL, "==", self.line)
+                return Token(TokenType.EQUALS, "=", self.line)
 
             if self.current_char == '!':
-                if self.peek() == '=':
-                    self.advance(); self.advance()
-                    return Token(TokenType.BANG_EQUAL, "!=", line=self.line)
                 self.advance()
-                return Token(TokenType.BANG, "!", line=self.line)
+                if self.current_char == '=':
+                    self.advance()
+                    return Token(TokenType.BANG_EQUAL, "!=", self.line)
+                return Token(TokenType.BANG, "!", self.line)
 
             if self.current_char == '>':
-                if self.peek() == '=':
-                    self.advance(); self.advance()
-                    return Token(TokenType.GREATER_EQUAL, ">=", line=self.line)
                 self.advance()
-                return Token(TokenType.GREATER, ">", line=self.line)
+                if self.current_char == '=':
+                    self.advance()
+                    return Token(TokenType.GREATER_EQUAL, ">=", self.line)
+                return Token(TokenType.GREATER, ">", self.line)
             
             if self.current_char == '<':
-                if self.peek() == '=':
-                    self.advance(); self.advance()
-                    return Token(TokenType.LESS_EQUAL, "<=", line=self.line)
                 self.advance()
-                return Token(TokenType.LESS, "<", line=self.line)
+                if self.current_char == '=':
+                    self.advance()
+                    return Token(TokenType.LESS_EQUAL, "<=", self.line)
+                return Token(TokenType.LESS, "<", self.line)
 
             # --- Single-character tokens ---
             token_map = {

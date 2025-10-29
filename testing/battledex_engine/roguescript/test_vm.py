@@ -7,7 +7,7 @@ check the final result.
 """
 
 import unittest
-from battledex-engine.roguescript.vm import VirtualMachine, InterpretResult
+from battledex_engine.roguescript.vm import VirtualMachine, InterpretResult
 
 class TestVM(unittest.TestCase):
 

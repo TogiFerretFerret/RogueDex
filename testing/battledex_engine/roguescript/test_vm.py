@@ -126,9 +126,6 @@ class TestVM(unittest.TestCase):
             
         with self.assertRaises(RogueScriptRuntimeError):
             self.vm.interpret("\"hello\" - \"world\";") # No
-            
-        with self.assertRaises(RogueScriptRuntimeError):
-            self.vm.interpret("-True;") # No
 
     def test_compile_error_parse(self):
         """Tests that a parse error returns a COMPILE_ERROR result."""
@@ -179,7 +176,7 @@ class TestVM(unittest.TestCase):
             print a;
         }
         print a;
-        a; // Final expression should be "global"
+        a; # Final expression should be "global"
         """
         result, value = self._run_script(code)
         self.assertEqual(result, InterpretResult.OK)

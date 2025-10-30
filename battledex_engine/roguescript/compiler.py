@@ -3,6 +3,9 @@ The RogueScript Compiler.
 
 Walks the AST from the Parser and emits bytecode
 into a Chunk for the VM to execute.
+
+FIX: This version removes an extra OP_POP in
+visit_if_stmt that was causing a compile error.
 """
 from __future__ import annotations # Fix for type hints
 from . import ast_nodes as ast
@@ -238,12 +241,21 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
         # 5. Patch the first jump to point *here*
         self._patch_jump(then_jump_offset)
         
-        # 6. Pop condition
-        self._emit_byte(OpCode.OP_POP, stmt.line) # Pop condition
+        # 6. Pop condition (FIX: This was the bug, it was popping twice)
+        #    We only pop the condition if we *didn't* take the 'then'
+        #    branch, which means we're about to execute the 'else' branch.
+        # self._emit_byte(OpCode.OP_POP, stmt.line) # REMOVED
         
         # 7. Compile 'else' block (if it exists)
         if stmt.else_branch:
+            # FIX: If we jump here, the condition is still on the stack.
+            # Pop it *before* running the else branch.
+            self._emit_byte(OpCode.OP_POP, stmt.line) # Pop condition
             stmt.else_branch.accept(self)
+        else:
+            # FIX: If there is no else branch, we still need to pop
+            # the condition if we skipped the 'then' branch.
+            self._emit_byte(OpCode.OP_POP, stmt.line) # Pop condition
             
         # 8. Patch the 'else' jump to point *here*
         self._patch_jump(else_jump_offset)

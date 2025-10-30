@@ -8,6 +8,7 @@ from __future__ import annotations # Fix for type hints
 from . import ast_nodes as ast
 from .bytecode import Chunk, OpCode
 from .token_types import TokenType
+from .lexer import Token # FIX: Import Token directly
 from .errors import CompileError
 from .function import RogueScriptFunction
 from dataclasses import dataclass
@@ -15,7 +16,7 @@ from dataclasses import dataclass
 @dataclass
 class Local:
     """Stores info about a local variable on the compiler's stack."""
-    name: ast.Token
+    name: Token
     depth: int
     
 class Compiler(ast.ExprVisitor, ast.StmtVisitor):
@@ -41,8 +42,8 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
         
         if func_type != "script":
             # Add a stack slot for the function itself (for recursion)
-            # FIX: Removed extra '0' arg. Token() takes (type, value, line).
-            self.locals.append(Local(ast.Token(TokenType.IDENTIFIER, "", 0), 0))
+            # FIX: Call the correct Token constructor (type, value, line)
+            self.locals.append(Local(Token(TokenType.IDENTIFIER, "", 0), 0))
         
     def compile(self, program: ast.Program) -> RogueScriptFunction:
         """
@@ -157,7 +158,7 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
 
     # --- Variable Helpers ---
 
-    def _add_local(self, name: ast.Token):
+    def _add_local(self, name: Token):
         # Check for re-definition in the *same* scope
         for local in reversed(self.locals):
             if local.depth < self.scope_depth:
@@ -167,14 +168,14 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
                 
         self.locals.append(Local(name, self.scope_depth))
 
-    def _resolve_local(self, name: ast.Token) -> int | None:
+    def _resolve_local(self, name: Token) -> int | None:
         """Find a local variable's stack slot index."""
         for i in range(len(self.locals) - 1, -1, -1):
             if self.locals[i].name.value == name.value:
                 return i
         return None # Not found (must be global or undefined)
 
-    def _identifier_constant(self, name: ast.Token) -> int:
+    def _identifier_constant(self, name: Token) -> int:
         """Adds a variable name to the constant pool."""
         const_index = self.chunk.add_constant(name.value)
         if const_index > 255:
@@ -425,6 +426,5 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
             
         # 3. Emit the call instruction with arity
         self._emit_bytes(OpCode.OP_CALL, len(expr.arguments), expr.line)
-
 
 

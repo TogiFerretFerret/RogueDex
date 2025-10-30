@@ -109,15 +109,16 @@ class VirtualMachine:
             self._call(main_function, 0)
             
             # FIX: The 'run' method will raise RogueScriptRuntimeError
-            # on its own. No need for a try/except here.
+            # on its own. We let it propagate up to the test harness.
             result, value = self.run()
             return (result, value)
 
         except (ParseError, CompileError) as e:
-            # FIX: Print the compile-time error
+            # Print the compile-time error
             print(e)
             return (InterpretResult.COMPILE_ERROR, None)
         except RogueScriptRuntimeError as e:
+            # The run loop raised an error. Print the trace.
             self._print_stack_trace(e)
             # Re-raise it for the test harness to catch
             raise e
@@ -125,8 +126,8 @@ class VirtualMachine:
     def run(self) -> (InterpretResult, any):
         """The main execution loop of the VM."""
         
-        # FIX: The main 'run' loop should NOT have its own try/except.
-        # It should let runtime errors propagate up to 'interpret'.
+        # This loop will be exited by a RogueScriptRuntimeError
+        # or when the last frame returns.
         
         while True:
             # Get the *current* frame. It can change!
@@ -167,15 +168,14 @@ class VirtualMachine:
                 self.pop()
             elif op == OpCode.OP_GET_GLOBAL:
                 name = self._read_constant(frame)
-                value = self.globals.get(name)
-                if value is None:
-                    # Don't return, raise!
+                # FIX: Check for existence *before* getting
+                if name not in self.globals:
                     self._runtime_error(f"Undefined global variable '{name}'.")
+                value = self.globals.get(name)
                 self.push(value)
             elif op == OpCode.OP_SET_GLOBAL:
                 name = self._read_constant(frame)
                 if name not in self.globals:
-                    # Don't return, raise!
                     self._runtime_error(f"Undefined global variable '{name}'.")
                 self.globals[name] = self.peek(0) # Don't pop
             elif op == OpCode.OP_GET_LOCAL:
@@ -207,19 +207,16 @@ class VirtualMachine:
                     elif isinstance(a, str) and isinstance(b, str):
                         result = a + b
                     else:
-                        # FIX: Just raise. The 'return' is unreachable.
                         self._runtime_error("Operands must be two numbers or two strings.")
                 
                 else: # All other ops must be numbers
                     if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
-                        # FIX: Just raise.
                         self._runtime_error("Operands must be numbers.")
                     
                     if op == OpCode.OP_SUBTRACT: result = a - b
                     elif op == OpCode.OP_MULTIPLY: result = a * b
                     elif op == OpCode.OP_DIVIDE:
                         if b == 0:
-                            # FIX: Just raise.
                             self._runtime_error("Division by zero.")
                         result = a / b
                     elif op == OpCode.OP_GREATER: result = a > b

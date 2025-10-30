@@ -10,7 +10,6 @@ from .compiler import Compiler
 from .errors import ParseError, CompileError, RogueScriptRuntimeError
 from .lexer import Lexer
 from .parser import Parser
-# Import from the new function.py file
 from .function import RogueScriptFunction, NativeFunction
 from enum import Enum, auto
 from dataclasses import dataclass
@@ -20,8 +19,6 @@ class InterpretResult(Enum):
     OK = auto()
     COMPILE_ERROR = auto()
     RUNTIME_ERROR = auto()
-
-# RogueScriptFunction and NativeFunction are now in function.py
 
 @dataclass
 class CallFrame:
@@ -92,6 +89,7 @@ class VirtualMachine:
             parser = Parser(tokens)
             program = parser.parse()
             if program is None:
+                # Parser.parse() now raises, but we'll keep this check
                 return (InterpretResult.COMPILE_ERROR, None)
 
             compiler = Compiler()
@@ -119,7 +117,8 @@ class VirtualMachine:
             return (InterpretResult.COMPILE_ERROR, None)
         except RogueScriptRuntimeError as e:
             self._print_stack_trace(e)
-            return (InterpretResult.RUNTIME_ERROR, None)
+            # Re-raise it for the test harness to catch
+            raise e
             
     def run(self) -> (InterpretResult, any):
         """The main execution loop of the VM."""
@@ -134,7 +133,7 @@ class VirtualMachine:
             instruction = self._read_byte(frame)
             op = OpCode(instruction) # Convert int back to OpCode
 
-            elif op == OpCode.OP_RETURN:
+            if op == OpCode.OP_RETURN:
                 result = self.pop() # Get return value
                 frame_to_pop = self.frames.pop()
                 
@@ -143,8 +142,7 @@ class VirtualMachine:
                     self.pop() # Pop the main script function
                     return (InterpretResult.OK, result) # All done!
                 
-                # Discard the function's stack frame
-                # FIX: Use stack_slot, not stack_slot + 1
+                # Discard the function's stack frame and args
                 self.stack = self.stack[:frame_to_pop.stack_slot]
                 self.push(result) # Push the return value
 
@@ -166,12 +164,14 @@ class VirtualMachine:
                 name = self._read_constant(frame)
                 value = self.globals.get(name)
                 if value is None:
-                    return self._runtime_error(f"Undefined global variable '{name}'.")
+                    # Don't return, raise!
+                    self._runtime_error(f"Undefined global variable '{name}'.")
                 self.push(value)
             elif op == OpCode.OP_SET_GLOBAL:
                 name = self._read_constant(frame)
                 if name not in self.globals:
-                    return self._runtime_error(f"Undefined global variable '{name}'.")
+                    # Don't return, raise!
+                    self._runtime_error(f"Undefined global variable '{name}'.")
                 self.globals[name] = self.peek(0) # Don't pop
             elif op == OpCode.OP_GET_LOCAL:
                 slot = self._read_byte(frame)
@@ -183,7 +183,7 @@ class VirtualMachine:
             # --- Unary Ops ---
             elif op == OpCode.OP_NEGATE:
                 if not isinstance(self.peek(0), (int, float)):
-                    return self._runtime_error("Operand must be a number.")
+                    self._runtime_error("Operand must be a number.")
                 self.push(-self.pop())
             
             elif op == OpCode.OP_NOT:
@@ -202,26 +202,24 @@ class VirtualMachine:
                     elif isinstance(a, str) and isinstance(b, str):
                         result = a + b
                     else:
-                        # FIX: Just raise. The 'return' is unreachable.
                         self._runtime_error("Operands must be two numbers or two strings.")
-                        return (InterpretResult.RUNTIME_ERROR, None) # Unreachable
+                        # This part is now unreachable, but we'll leave it
+                        return (InterpretResult.RUNTIME_ERROR, None) 
                 
-                # All other ops must be numbers
-                elif not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
-                    # FIX: Just raise.
-                    self._runtime_error("Operands must be numbers.")
-                    return (InterpretResult.RUNTIME_ERROR, None) # Unreachable
-                
-                elif op == OpCode.OP_SUBTRACT: result = a - b
-                elif op == OpCode.OP_MULTIPLY: result = a * b
-                elif op == OpCode.OP_DIVIDE:
-                    if b == 0:
-                        # FIX: Just raise.
-                        self._runtime_error("Division by zero.")
-                        return (InterpretResult.RUNTIME_ERROR, None) # Unreachable
-                    result = a / b
-                elif op == OpCode.OP_GREATER: result = a > b
-                elif op == OpCode.OP_LESS:   result = a < b
+                else: # All other ops must be numbers
+                    if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+                        self._runtime_error("Operands must be numbers.")
+                        return (InterpretResult.RUNTIME_ERROR, None)
+                    
+                    if op == OpCode.OP_SUBTRACT: result = a - b
+                    elif op == OpCode.OP_MULTIPLY: result = a * b
+                    elif op == OpCode.OP_DIVIDE:
+                        if b == 0:
+                            self._runtime_error("Division by zero.")
+                            return (InterpretResult.RUNTIME_ERROR, None)
+                        result = a / b
+                    elif op == OpCode.OP_GREATER: result = a > b
+                    elif op == OpCode.OP_LESS:   result = a < b
                 
                 self.pop()
                 self.pop()
@@ -254,7 +252,14 @@ class VirtualMachine:
                 callee = self.peek(arg_count) # Callee is below args
                 
                 if not self._call(callee, arg_count):
+                    # _call will raise its own error
+                    # This return is for the type checker
                     return (InterpretResult.RUNTIME_ERROR, None)
+            
+            # This is the fix for the SyntaxError
+            # This 'else' ensures the loop is valid
+            else:
+                self._runtime_error(f"Unknown opcode {op}")
                 
     # --- Call Helper ---
     
@@ -271,8 +276,8 @@ class VirtualMachine:
             frame = CallFrame(
                 function=callee,
                 ip=0,
-                # FIX: The slot is *below* the args (callee + args)
-                stack_slot=len(self.stack) - arg_count - 1
+                # FIX: slot is *below* callee and args
+                stack_slot=len(self.stack) - arg_count - 1 
             )
             self.frames.append(frame)
             return True
@@ -293,25 +298,26 @@ class VirtualMachine:
             return True
             
         else:
-            self._runtime_error("Can only call functions.")
+            self._runtime_error(f"Can only call functions (got {type(callee)}).")
             return False
 
     # --- Stack Helpers ---
     
     def push(self, value: any):
         if len(self.stack) >= self.STACK_MAX:
-            raise RogueScriptRuntimeError("Stack overflow.", self.frames[-1].current_line())
+            # Raise, don't return
+            self._runtime_error("Stack overflow.")
         self.stack.append(value)
         
     def pop(self) -> any:
         if not self.stack:
-            raise RogueScriptRuntimeError("Stack underflow.", self.frames[-1].current_line())
+            self._runtime_error("Stack underflow.")
         return self.stack.pop()
 
     def peek(self, distance: int) -> any:
         """Look at a value on the stack without popping."""
         if len(self.stack) <= distance:
-            raise RogueScriptRuntimeError("Stack underflow on peek.", self.frames[-1].current_line())
+            self._runtime_error("Stack underflow on peek.")
         return self.stack[-(distance + 1)]
 
     def _is_falsy(self, value: any) -> bool:
@@ -337,7 +343,8 @@ class VirtualMachine:
 
     # --- Error and Debugging ---
     
-    def _runtime_error(self, message: str) -> (InterpretResult, any):
+    def _runtime_error(self, message: str):
+        """Raises a RogueScriptRuntimeError."""
         line = self.frames[-1].current_line()
         raise RogueScriptRuntimeError(message, line)
 
@@ -347,13 +354,28 @@ class VirtualMachine:
         # Walk the call stack *backward*
         for frame in reversed(self.frames):
             line = frame.current_line()
+            # Handle error at the very start of a function
+            if line == 0 and len(frame.function.chunk.lines) > 0:
+                line = frame.function.chunk.lines[0]
+                
             func_name = frame.function.name
+            if not func_name:
+                func_name = "<script>"
             print(f"  [line {line}] in {func_name}()")
 
     def _debug_trace_execution(self, frame: CallFrame):
         """A useful debug print-out for tracing."""
         op_line = f"[IP {frame.ip:04d} L{frame.current_line():>3}] "
-        op_code = OpCode(frame.function.chunk.code[frame.ip])
+        
+        try:
+            op_code = OpCode(frame.function.chunk.code[frame.ip])
+        except IndexError:
+            print(f"{op_line} END OF CHUNK")
+            return
+        except ValueError:
+            print(f"{op_line} UNKNOWN OPCODE {frame.function.chunk.code[frame.ip]}")
+            return
+
         
         if op_code == OpCode.OP_PUSH_CONST:
             const_index = frame.function.chunk.code[frame.ip + 1]
@@ -372,6 +394,5 @@ class VirtualMachine:
             op_line += op_code.name
             
         print(f"{op_line:<40} STACK: {self.stack}")
-
 
 

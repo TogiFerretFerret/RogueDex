@@ -4,12 +4,11 @@ The RogueScript Compiler.
 Walks the AST from the Parser and emits bytecode
 into a Chunk for the VM to execute.
 """
-from __future__ import annotations # Add this line at the very top
+from __future__ import annotations # Fix for type hints
 from . import ast_nodes as ast
 from .bytecode import Chunk, OpCode
 from .token_types import TokenType
 from .errors import CompileError
-# Import from the new function.py file, NOT vm.py
 from .function import RogueScriptFunction
 from dataclasses import dataclass
 
@@ -28,11 +27,18 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
         self.chunk: Chunk = Chunk(name="<script>")
         self.locals: list[Local] = []
         self.scope_depth: int = 0
-        self.function: RogueScriptFunction = RogueScriptFunction(name="<script>", arity=0)
-        self.chunk = self.function.chunk # All code goes into the function's chunk
         
         # This setup allows for nested function compilation
         self.parent: 'Compiler' | None = parent_compiler
+        
+        if func_type == "script":
+            self.function: RogueScriptFunction = RogueScriptFunction(name="<script>", arity=0)
+        else:
+            # The 'name' will be set by visit_def_stmt
+            self.function: RogueScriptFunction = RogueScriptFunction(name="", arity=0)
+            
+        self.chunk = self.function.chunk # All code goes into the function's chunk
+        
         if func_type != "script":
             # Add a stack slot for the function itself (for recursion)
             self.locals.append(Local(ast.Token(TokenType.IDENTIFIER, "", 0), 0))
@@ -66,12 +72,12 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
                 # Script ends with a non-expression (var, if, etc.)
                 # Add an implicit return nil.
                 self._emit_return(program.line)
-
+                
             return self.function
             
         except CompileError as e:
-            print(e)
-            return None
+            # This should be caught by the VM's interpret() method
+            raise e
 
     def _begin_scope(self):
         self.scope_depth += 1
@@ -418,7 +424,5 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
             
         # 3. Emit the call instruction with arity
         self._emit_bytes(OpCode.OP_CALL, len(expr.arguments), expr.line)
-
-
 
 

@@ -25,6 +25,15 @@ from rotomdex import (
 from battledex_engine.battle import Battle
 from battledex_engine.interfaces import Combatant
 
+# Type hint for our concrete Pokemon class
+# We can't import it directly due to test discovery paths,
+# but we can use this for better type hints in the test.
+try:
+    from rotomdex.pokemon import Pokemon
+except ImportError:
+    # This is fine, we'll just use the Combatant interface
+    Pokemon = Combatant 
+
 class TestBattleIntegration(unittest.TestCase):
 
     pokemon_data_map = {}
@@ -82,8 +91,8 @@ class TestBattleIntegration(unittest.TestCase):
 
         # Store initial HP for comparison
         # We need to cast to Pokemon to access 'stats' and 'current_hp'
-        pika_pokemon = pikachu
-        char_pokemon = charmander
+        pika_pokemon: Pokemon = pikachu
+        char_pokemon: Pokemon = charmander
         
         pika_initial_hp = pika_pokemon.stats['hp']
         char_initial_hp = char_pokemon.stats['hp']
@@ -138,6 +147,63 @@ class TestBattleIntegration(unittest.TestCase):
         print(f"  Pikachu HP: {pika_pokemon.current_hp} / {pika_initial_hp}")
         print(f"  Charmander HP: {char_pokemon.current_hp} / {char_initial_hp}")
         print("--- Test Complete ---")
+
+    # --- Feature Checklist (To-Do) ---
+
+    @unittest.skip("Feature not yet implemented in ruleset")
+    def test_terastallization(self):
+        """
+        Tests that a Pokémon can Terastallize and that its
+        move damage is correctly modified.
+        """
+        # 1. Create a Pikachu (Electric) and a Ogerpon (Grass)
+        # 2. Give Pikachu a 'terastalize' action (will need new Action type)
+        #    and set its Tera Type to 'Normal'
+        # 3. Submit 'terastalize' for Pikachu and 'tackle' for Ogerpon
+        # 4. Assert Pikachu's type is now 'Normal'
+        # 5. On Turn 2, have Pikachu use Tackle (now STAB)
+        # 6. Assert damage is calculated based on 'Normal' type
+        pass
+
+    @unittest.skip("Feature not yet implemented in ruleset")
+    def test_mega_evolution(self):
+        """
+        Tests that a Pokémon can Mega Evolve and its stats
+        and abilities change.
+        """
+        # 1. Create a Charizard (with 'charizardite-x')
+        # 2. Submit a 'mega_evolve' action
+        # 3. Process turn
+        # 4. Assert Charizard's species is now 'charizard-mega-x'
+        # 5. Assert Charizard's stats have been recalculated
+        # 6. Assert Charizard's type is now Fire/Dragon
+        pass
+
+    @unittest.skip("Feature not yet implemented in ruleset")
+    def test_z_move(self):
+        """
+        Tests that a Pokémon can use a Z-Move one time.
+        """
+        # 1. Create a Pikachu (with 'pikanium-z')
+        # 2. Submit a 'z_move' action for 'volt-tackle'
+        # 3. Process turn
+        # 4. Assert that the 'catastropika' event was generated
+        # 5. Assert target took massive damage
+        # 6. On Turn 2, assert Pikachu can no longer use a Z-Move
+        pass
+
+    @unittest.skip("Feature not yet implemented in ruleset")
+    def test_dynamax(self):
+        """
+        Tests that a Pokémon can Dynamax for 3 turns.
+        """
+        # 1. Create a Charizard
+        # 2. Submit 'dynamax' action
+        # 3. Assert Charizard's HP has doubled
+        # 4. Assert its moves have been replaced with 'Max' moves
+        # 5. Process 3 more turns
+        # 6. Assert Charizard has reverted to normal
+        pass
 
 # This allows running the test file directly
 if __name__ == '__main__':

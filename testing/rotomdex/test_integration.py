@@ -38,6 +38,7 @@ class TestBattleIntegration(unittest.TestCase):
         """
         print("Loading all game data for integration tests...")
         try:
+            # FIX: Pass no arguments to use the default cache path
             cls.pokemon_data_map = load_pokemon_data()
             cls.move_data_map = load_move_data()
             
@@ -80,10 +81,14 @@ class TestBattleIntegration(unittest.TestCase):
                       "Make sure 'pikachu', 'charmander', 'tackle', etc. exist in your JSON.")
 
         # Store initial HP for comparison
-        pika_initial_hp = pikachu.stats['hp']
-        char_initial_hp = charmander.stats['hp']
-        self.assertEqual(pikachu.current_hp, pika_initial_hp)
-        self.assertEqual(charmander.current_hp, char_initial_hp)
+        # We need to cast to Pokemon to access 'stats' and 'current_hp'
+        pika_pokemon = pikachu
+        char_pokemon = charmander
+        
+        pika_initial_hp = pika_pokemon.stats['hp']
+        char_initial_hp = char_pokemon.stats['hp']
+        self.assertEqual(pika_pokemon.current_hp, pika_initial_hp)
+        self.assertEqual(char_pokemon.current_hp, char_initial_hp)
 
         all_combatants = {
             pikachu.id: pikachu,
@@ -100,11 +105,18 @@ class TestBattleIntegration(unittest.TestCase):
         )
 
         # --- 5. Run a Test Turn ---
-        pika_action = pikachu.moves[0] # Tackle
-        char_action = charmander.moves[0] # Scratch
+        pika_action = pika_pokemon.moves[0] # Tackle
+        char_action = char_pokemon.moves[0] # Scratch
         
         print(f"  Submitting actions: {pika_action.name} and {char_action.name}")
-        battle.submit_actions([pika_action, char_action])
+        
+        # FIX: Submit actions as a dictionary mapping user_id to their action.
+        # This is how the engine will know *who* is doing *what*.
+        actions_to_submit = {
+            pikachu.id: pika_action,
+            charmander.id: char_action,
+        }
+        battle.submit_actions(actions_to_submit)
         
         log = battle.process_turn()
         
@@ -120,14 +132,15 @@ class TestBattleIntegration(unittest.TestCase):
         self.assertTrue(has_damage_event, "No 'DAMAGE' event was found in the log.")
         
         # Check that HP has *actually* decreased for both
-        self.assertLess(pikachu.current_hp, pika_initial_hp, "Pikachu's HP did not decrease.")
-        self.assertLess(charmander.current_hp, char_initial_hp, "Charmander's HP did not decrease.")
+        self.assertLess(pika_pokemon.current_hp, pika_initial_hp, "Pikachu's HP did not decrease.")
+        self.assertLess(char_pokemon.current_hp, char_initial_hp, "Charmander's HP did not decrease.")
         
-        print(f"  Pikachu HP: {pikachu.current_hp} / {pika_initial_hp}")
-        print(f"  Charmander HP: {charmander.current_hp} / {char_initial_hp}")
+        print(f"  Pikachu HP: {pika_pokemon.current_hp} / {pika_initial_hp}")
+        print(f"  Charmander HP: {char_pokemon.current_hp} / {char_initial_hp}")
         print("--- Test Complete ---")
 
 # This allows running the test file directly
 if __name__ == '__main__':
     unittest.main()
+
 

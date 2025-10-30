@@ -59,7 +59,9 @@ class ASTPrinter(ast.ExprVisitor, ast.StmtVisitor):
     def visit_if_stmt(self, stmt: ast.IfStmt):
         if not stmt.else_branch:
             return self._parenthesize(f"if", stmt.condition, stmt.then_branch, "else=None")
-        return self._parenthesize(f"if", stmt.condition, stmt.then_branch, f"else=({stmt.else_branch.accept(self)})")
+        
+        # FIX: Removed extra parentheses around the else branch to match test
+        return self._parenthesize(f"if", stmt.condition, stmt.then_branch, f"else={stmt.else_branch.accept(self)}")
         
     def visit_while_stmt(self, stmt: ast.WhileStmt):
         return self._parenthesize("while", stmt.condition, stmt.body)

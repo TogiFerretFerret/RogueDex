@@ -63,6 +63,10 @@ class Parser:
         while not self._is_at_end():
             statements.append(self._declaration())
             
+        # FIX: If we had a parse error, don't return a Program.
+        if self.had_error:
+            return None
+            
         # FIX: Pass the line number of the EOF token
         return ast.Program(statements, self.tokens[self.current].line)
 
@@ -351,7 +355,6 @@ class Parser:
             # FIX: Pass the line number
             return ast.Grouping(expr, line)
             
-        # FIX: Corrected SyntaxError
         raise self._error(self._peek(), "Error: Expected expression")
 
     # --- Parser Helpers ---
@@ -403,7 +406,8 @@ class Parser:
         
         err_msg = f"[Line {line}] Error: {message} ({loc})"
         self.had_error = True
-        return ParseError(err_msg)
+        # FIX: Pass 'line' as the second argument to the ParseError
+        return ParseError(err_msg, line)
 
     def _synchronize(self):
         """Discards tokens until a probable statement boundary."""
@@ -419,5 +423,8 @@ class Parser:
                 TokenType.FOR, TokenType.LBRACE
             ):
                 return
+                
+            self._advance()
+
 
 

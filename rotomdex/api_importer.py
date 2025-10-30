@@ -5,7 +5,12 @@ A utility script to fetch Pokémon and Move data from the public
 PokéAPI, transform it into the format our factories expect,
 and save it to local JSON files (pokemon.json, moves.json).
 
-This allows us to update our game data without changing the source code.
+This version is optimized for LOW MEMORY usage by writing
+data to disk incrementally instead of building a large
+dictionary in memory.
+
+It also fetches all Pokémon *varieties* (Megas, Alolan, etc.),
+not just base forms.
 
 Requires the 'requests' library:
 pip install requests
@@ -13,8 +18,9 @@ pip install requests
 
 import requests
 import json
+import io
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Generator, Tuple
 
 # --- Configuration ---
 
@@ -26,13 +32,13 @@ DATA_CACHE_DIR = Path(__file__).parent / "data"
 POKEMON_CACHE_FILE = DATA_CACHE_DIR / "pokemon.json"
 MOVE_CACHE_FILE = DATA_CACHE_DIR / "moves.json"
 
-# Limits for fetching. ~1025 Pokémon and ~920 moves as of Gen 9.
-# We'll go higher to be safe for the future.
-POKEMON_LIMIT = 1500
+# Limits for fetching. ~1300 species (Gen 9) -> ~1500 varieties
+# ~920 moves. We'll set a high ceiling.
+SPECIES_LIMIT = 1500
 MOVE_LIMIT = 1500
 
 # This mapping is CRITICAL. It translates PokéAPI's stat names
-# to the stat names your `Pokemon` class expects.
+# to the stat names our `Pokemon` class expects.
 STAT_NAME_MAP = {
     "hp": "hp",
     "attack": "attack",
@@ -46,8 +52,8 @@ STAT_NAME_MAP = {
 
 def _transform_pokemon_data(api_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Converts a full Pokémon data object from PokéAPI into our
-    simplified format needed by `create_pokemon_from_data`.
+    Converts a full Pokémon data object (a "variety") from PokéAPI
+    into our simplified format.
     """
     types = [t['type']['name'] for t in api_data['types']]
     
@@ -67,7 +73,7 @@ def _transform_pokemon_data(api_data: Dict[str, Any]) -> Dict[str, Any]:
 def _transform_move_data(api_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Converts a full Move data object from PokéAPI into our
-    simplified format needed by `create_move_from_data`.
+    simplified format.
     """
     return {
         "move_type": api_data['type']['name'],
@@ -78,12 +84,104 @@ def _transform_move_data(api_data: Dict[str, Any]) -> Dict[str, Any]:
         "priority": api_data.get('priority', 0),
     }
 
-# --- Main Fetching Function ---
+# --- Data Fetching Generators (Low Memory) ---
+
+def _fetch_all_pokemon_varieties() -> Generator[Tuple[str, Dict[str, Any]], None, None]:
+    """
+    Generator that fetches all Pokémon species, then all varieties
+    (including Megas, Alolan, etc.) one by one.
+    
+    Yields:
+        A tuple of (pokemon_variety_name, transformed_data_dict)
+    """
+    print(f"Fetching {SPECIES_LIMIT} Pokémon species list...")
+    try:
+        response = requests.get(f"{POKEAPI_BASE_URL}pokemon-species?limit={SPECIES_LIMIT}")
+        response.raise_for_status()
+        species_list = response.json()['results']
+        
+        total_species = len(species_list)
+        for i, species_entry in enumerate(species_list):
+            species_name = species_entry['name']
+            print(f"  Fetching species {i+1}/{total_species}: {species_name}...")
+            
+            species_data = requests.get(species_entry['url']).json()
+            
+            for variety_entry in species_data['varieties']:
+                variety_name = variety_entry['pokemon']['name']
+                print(f"    -> Fetching variety: {variety_name}")
+                
+                try:
+                    poke_data = requests.get(variety_entry['pokemon']['url']).json()
+                    transformed_data = _transform_pokemon_data(poke_data)
+                    yield variety_name, transformed_data
+                except requests.RequestException as e:
+                    print(f"    WARNING: Failed to fetch variety {variety_name}: {e}")
+                    
+    except requests.RequestException as e:
+        print(f"\nFATAL: Failed to download Pokémon species list: {e}")
+        return
+
+def _fetch_all_moves() -> Generator[Tuple[str, Dict[str, Any]], None, None]:
+    """
+    Generator that fetches all moves one by one.
+    
+    Yields:
+        A tuple of (move_name, transformed_data_dict)
+    """
+    print(f"Fetching {MOVE_LIMIT} move list...")
+    try:
+        response = requests.get(f"{POKEAPI_BASE_URL}move?limit={MOVE_LIMIT}")
+        response.raise_for_status()
+        move_list = response.json()['results']
+        
+        total_moves = len(move_list)
+        for i, move_entry in enumerate(move_list):
+            move_name = move_entry['name']
+            print(f"  Fetching move {i+1}/{total_moves}: {move_name}...")
+            
+            try:
+                move_data = requests.get(move_entry['url']).json()
+                transformed_data = _transform_move_data(move_data)
+                yield move_name, transformed_data
+            except requests.RequestException as e:
+                print(f"    WARNING: Failed to fetch move {move_name}: {e}")
+
+    except requests.RequestException as e:
+        print(f"\nFATAL: Failed to download move list: {e}")
+        return
+
+# --- Main Stream-to-File Function ---
+
+def _stream_generator_to_json_file(generator: Generator, file_path: Path):
+    """
+    Takes a generator that yields (key, data) tuples and streams
+    them into a large JSON file on disk without storing them
+    all in memory.
+    """
+    print(f"Streaming data to {file_path}...")
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write("{\n")
+        
+        is_first_entry = True
+        count = 0
+        for name, data in generator:
+            json_string = json.dumps(data)
+            
+            if not is_first_entry:
+                f.write(",\n")
+            
+            f.write(f'  "{name}": {json_string}')
+            is_first_entry = False
+            count += 1
+            
+        f.write("\n}\n")
+    print(f"Successfully streamed {count} entries to {file_path}.")
 
 def update_data_cache(force_update: bool = False):
     """
     Fetches all Pokémon and Move data from PokéAPI and saves it
-    to the local JSON cache.
+    to the local JSON cache using a low-memory stream.
     
     Args:
         force_update: If True, will re-download all data even if
@@ -96,49 +194,19 @@ def update_data_cache(force_update: bool = False):
         print("Data cache is already up to date. Skipping download.")
         return
 
-    # --- Fetch Pokémon ---
-    print(f"Fetching {POKEMON_LIMIT} Pokémon from PokéAPI...")
-    all_pokemon_data = {}
-    try:
-        response = requests.get(f"{POKEAPI_BASE_URL}pokemon?limit={POKEMON_LIMIT}")
-        response.raise_for_status()
-        pokemon_list = response.json()['results']
+    # --- Process Pokémon ---
+    if not POKEMON_CACHE_FILE.exists() or force_update:
+        pokemon_generator = _fetch_all_pokemon_varieties()
+        _stream_generator_to_json_file(pokemon_generator, POKEMON_CACHE_FILE)
+    else:
+        print(f"{POKEMON_CACHE_FILE} already exists. Skipping Pokémon.")
 
-        for i, entry in enumerate(pokemon_list):
-            name = entry['name']
-            print(f"  Fetching Pokémon {i+1}/{len(pokemon_list)}: {name}...")
-            poke_data = requests.get(entry['url']).json()
-            all_pokemon_data[name] = _transform_pokemon_data(poke_data)
-        
-        print(f"Saving {len(all_pokemon_data)} Pokémon to {POKEMON_CACHE_FILE}")
-        with open(POKEMON_CACHE_FILE, 'w', encoding='utf-8') as f:
-            json.dump(all_pokemon_data, f, indent=2)
-
-    except requests.RequestException as e:
-        print(f"\nFATAL: Failed to download Pokémon data: {e}")
-        return
-
-    # --- Fetch Moves ---
-    print(f"\nFetching {MOVE_LIMIT} moves from PokéAPI...")
-    all_move_data = {}
-    try:
-        response = requests.get(f"{POKEAPI_BASE_URL}move?limit={MOVE_LIMIT}")
-        response.raise_for_status()
-        move_list = response.json()['results']
-
-        for i, entry in enumerate(move_list):
-            name = entry['name']
-            print(f"  Fetching move {i+1}/{len(move_list)}: {name}...")
-            move_data = requests.get(entry['url']).json()
-            all_move_data[name] = _transform_move_data(move_data)
-        
-        print(f"Saving {len(all_move_data)} moves to {MOVE_CACHE_FILE}")
-        with open(MOVE_CACHE_FILE, 'w', encoding='utf-8') as f:
-            json.dump(all_move_data, f, indent=2)
-
-    except requests.RequestException as e:
-        print(f"\nFATAL: Failed to download move data: {e}")
-        return
+    # --- Process Moves ---
+    if not MOVE_CACHE_FILE.exists() or force_update:
+        move_generator = _fetch_all_moves()
+        _stream_generator_to_json_file(move_generator, MOVE_CACHE_FILE)
+    else:
+        print(f"{MOVE_CACHE_FILE} already exists. Skipping moves.")
 
     print("\nData cache update complete!")
 
@@ -155,4 +223,5 @@ if __name__ == "__main__":
     import sys
     force = "force" in sys.argv
     update_data_cache(force_update=force)
+
 

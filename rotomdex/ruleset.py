@@ -4,6 +4,9 @@ rotomdex/ruleset.py
 This is the concrete implementation of the Ruleset interface.
 This is the "brain" that plugs into the battledex-engine and
 defines all Pokémon-specific game logic.
+
+FIX: This version correctly reads the `user_id` from the
+event payload to determine who is attacking.
 """
 
 from typing import Dict, List, Any, Callable
@@ -39,6 +42,18 @@ class PokemonRuleset(Ruleset):
             "FAINT": [self._handle_faint],
         }
 
+    def _find_target_id(self, user_id: str, state: BattleState) -> str | None:
+        """
+        Simple helper for 1v1 battles to find the opponent.
+        """
+        for team in state.teams:
+            if team.active_combatant_id == user_id:
+                # This is the user's team, skip it
+                continue
+            # In 1v1, the first *other* active combatant is the target
+            return team.active_combatant_id
+        return None
+
     # --- Event Handler Implementations ---
 
     def _handle_action_request(self, event: Event, state: BattleState, queue: EventQueue):
@@ -47,19 +62,16 @@ class PokemonRuleset(Ruleset):
         This is where we determine what the action *does*.
         """
         action = event.payload.get("action")
+        user_id = event.payload.get("user_id") # FIX: Get user_id from payload
         
-        # We only know how to handle Moves right now
-        if not isinstance(action, Move):
+        if not isinstance(action, Move) or not user_id:
             return
 
         move: Move = action
         
-        # In a real game, we'd get the user/target from the event payload.
-        # For this simple test, we'll assume Team 0 attacks Team 1.
-        user_id = state.teams[0].active_combatant_id
-        target_id = state.teams[1].active_combatant_id
-        
+        # Find the user and target
         user = self.combatant_map.get(user_id)
+        target_id = self._find_target_id(user_id, state)
         target = self.combatant_map.get(target_id)
         
         if not user or not target:
@@ -121,4 +133,5 @@ class PokemonRuleset(Ruleset):
         print(f"Ruleset: {target.species_name} fainted!")
         # In a real game, you would add events here to
         # check for a winner or force the player to switch.
+
 

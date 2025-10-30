@@ -26,8 +26,10 @@ class ASTPrinter(ast.ExprVisitor, ast.StmtVisitor):
                 parts.append("nil")
             else:
                 parts.append(str(expr))
-        parts.append(")")
-        return " ".join(parts)
+        
+        # FIX: Join with a space, then add the closing parenthesis
+        # This prevents the trailing space before the ')'
+        return " ".join(parts) + ")"
 
     # --- Statement Visitors ---
 
@@ -89,5 +91,6 @@ class ASTPrinter(ast.ExprVisitor, ast.StmtVisitor):
 
     def visit_call_expr(self, expr: ast.CallExpr):
         return self._parenthesize("call", expr.callee, *expr.arguments)
+
 
 

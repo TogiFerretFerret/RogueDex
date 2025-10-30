@@ -47,11 +47,26 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
             
         # We visit all statements in the main <script> body
         try:
-            for statement in program.statements:
-                statement.accept(self)
-                
-            # Finish the main script's chunk
-            self._emit_return(program.line)
+            # FIX: Iterate with index to find the last statement
+            for i, statement in enumerate(program.statements):
+                if i == len(program.statements) - 1 and isinstance(statement, ast.ExpressionStmt):
+                    # Special case: last statement is an expression.
+                    # Compile it but DON'T pop it. This is the script's
+                    # "implicit return" value.
+                    statement.expression.accept(self)
+                    self._emit_byte(OpCode.OP_RETURN, statement.line)
+                else:
+                    # Compile all other statements normally
+                    statement.accept(self)
+            
+            if not program.statements:
+                # Empty script
+                self._emit_return(program.line)
+            elif not isinstance(program.statements[-1], ast.ExpressionStmt):
+                # Script ends with a non-expression (var, if, etc.)
+                # Add an implicit return nil.
+                self._emit_return(program.line)
+
             return self.function
             
         except CompileError as e:
@@ -403,6 +418,7 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
             
         # 3. Emit the call instruction with arity
         self._emit_bytes(OpCode.OP_CALL, len(expr.arguments), expr.line)
+
 
 
 

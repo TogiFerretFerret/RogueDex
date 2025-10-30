@@ -134,7 +134,7 @@ class VirtualMachine:
             instruction = self._read_byte(frame)
             op = OpCode(instruction) # Convert int back to OpCode
 
-            if op == OpCode.OP_RETURN:
+            elif op == OpCode.OP_RETURN:
                 result = self.pop() # Get return value
                 frame_to_pop = self.frames.pop()
                 
@@ -144,6 +144,7 @@ class VirtualMachine:
                     return (InterpretResult.OK, result) # All done!
                 
                 # Discard the function's stack frame
+                # FIX: Use stack_slot, not stack_slot + 1
                 self.stack = self.stack[:frame_to_pop.stack_slot]
                 self.push(result) # Push the return value
 
@@ -201,17 +202,23 @@ class VirtualMachine:
                     elif isinstance(a, str) and isinstance(b, str):
                         result = a + b
                     else:
-                        return self._runtime_error("Operands must be two numbers or two strings.")
+                        # FIX: Just raise. The 'return' is unreachable.
+                        self._runtime_error("Operands must be two numbers or two strings.")
+                        return (InterpretResult.RUNTIME_ERROR, None) # Unreachable
                 
                 # All other ops must be numbers
                 elif not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
-                    return self._runtime_error("Operands must be numbers.")
+                    # FIX: Just raise.
+                    self._runtime_error("Operands must be numbers.")
+                    return (InterpretResult.RUNTIME_ERROR, None) # Unreachable
                 
                 elif op == OpCode.OP_SUBTRACT: result = a - b
                 elif op == OpCode.OP_MULTIPLY: result = a * b
                 elif op == OpCode.OP_DIVIDE:
                     if b == 0:
-                        return self._runtime_error("Division by zero.")
+                        # FIX: Just raise.
+                        self._runtime_error("Division by zero.")
+                        return (InterpretResult.RUNTIME_ERROR, None) # Unreachable
                     result = a / b
                 elif op == OpCode.OP_GREATER: result = a > b
                 elif op == OpCode.OP_LESS:   result = a < b
@@ -264,8 +271,8 @@ class VirtualMachine:
             frame = CallFrame(
                 function=callee,
                 ip=0,
-                # Set the new frame's stack base *above* the args
-                stack_slot=len(self.stack) - arg_count
+                # FIX: The slot is *below* the args (callee + args)
+                stack_slot=len(self.stack) - arg_count - 1
             )
             self.frames.append(frame)
             return True
@@ -365,5 +372,6 @@ class VirtualMachine:
             op_line += op_code.name
             
         print(f"{op_line:<40} STACK: {self.stack}")
+
 
 

@@ -351,7 +351,8 @@ class Parser:
             # FIX: Pass the line number
             return ast.Grouping(expr, line)
             
-        raise self._error(self."Error: Expected expression")
+        # FIX: Corrected SyntaxError
+        raise self._error(self._peek(), "Error: Expected expression")
 
     # --- Parser Helpers ---
 
@@ -418,7 +419,5 @@ class Parser:
                 TokenType.FOR, TokenType.LBRACE
             ):
                 return
-                
-            self._advance()
 
 

@@ -41,7 +41,7 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
         
         if func_type != "script":
             # Add a stack slot for the function itself (for recursion)
-            self.locals.append(Local(ast.Token(TokenType.IDENTIFIER, "", 0), 0))
+            self.locals.append(Local(ast.Token(TokenType.IDENTIFIER, "", 0, 0), 0))
         
     def compile(self, program: ast.Program) -> RogueScriptFunction:
         """

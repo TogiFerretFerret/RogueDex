@@ -89,7 +89,7 @@ class VirtualMachine:
             parser = Parser(tokens)
             program = parser.parse()
             if program is None:
-                # Parser.parse() now raises, but we'll keep this check
+                # Parser detected an error and returned None
                 return (InterpretResult.COMPILE_ERROR, None)
 
             compiler = Compiler()
@@ -108,6 +108,8 @@ class VirtualMachine:
             # Call it
             self._call(main_function, 0)
             
+            # FIX: The 'run' method will raise RogueScriptRuntimeError
+            # on its own. No need for a try/except here.
             result, value = self.run()
             return (result, value)
 
@@ -122,6 +124,9 @@ class VirtualMachine:
             
     def run(self) -> (InterpretResult, any):
         """The main execution loop of the VM."""
+        
+        # FIX: The main 'run' loop should NOT have its own try/except.
+        # It should let runtime errors propagate up to 'interpret'.
         
         while True:
             # Get the *current* frame. It can change!
@@ -191,7 +196,7 @@ class VirtualMachine:
             
             # --- Binary Ops ---
             elif op in (OpCode.OP_ADD, OpCode.OP_SUBTRACT, OpCode.OP_MULTIPLY, 
-                         OpCode.OP_DIVIDE, OpCode.OP_GREATER, OpCode.OP_LESS):
+                        OpCode.OP_DIVIDE, OpCode.OP_GREATER, OpCode.OP_LESS):
                 
                 b = self.peek(0)
                 a = self.peek(1)
@@ -256,7 +261,7 @@ class VirtualMachine:
             
             else:
                 self._runtime_error(f"Unknown opcode {op}")
-                
+            
     # --- Call Helper ---
     
     def _call(self, callee: any, arg_count: int) -> bool:

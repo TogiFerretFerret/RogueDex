@@ -13,44 +13,37 @@ from typing import Dict, Any, List
 PokemonData = Dict[str, Any]
 MoveData = Dict[str, Any]
 
-def load_pokemon_data(data_path: Path) -> Dict[str, PokemonData]:
-    """
-    Loads all Pokémon data from a given JSON file.
+# --- NEW: Point to the 'data' subdirectory ---
+DATA_CACHE_DIR = Path(__file__).parent / "data"
 
-    Args:
-        data_path: The path to the pokemon.json file.
-
-    Returns:
-        A dictionary mapping Pokémon species names to their data.
+def load_pokemon_data() -> Dict[str, PokemonData]:
     """
+    Loads all Pokémon data from the 'data/pokemon.json' cache.
+    """
+    data_path = DATA_CACHE_DIR / "pokemon.json"
     try:
         with open(data_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        # In a real application, you'd add schema validation here (e.g., with Pydantic)
-        # to ensure the loaded data has the expected structure.
         return data
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        print(f"Error loading Pokémon data from {data_path}: {e}")
+        print(f"Error: Pokémon data not found at {data_path}.")
+        print("Please run the API importer script:")
+        print("python rotomdex/api_importer.py")
         return {}
 
 
-def load_move_data(data_path: Path) -> Dict[str, MoveData]:
+def load_move_data() -> Dict[str, MoveData]:
     """
-    Loads all move data from a given JSON file.
-
-    Args:
-        data_path: The path to the moves.json file.
-
-    Returns:
-        A dictionary mapping move names to their data.
+    Loads all move data from the 'data/moves.json' cache.
     """
+    data_path = DATA_CACHE_DIR / "moves.json"
     try:
         with open(data_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        # Add schema validation here in a real application.
         return data
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        print(f"Error loading move data from {data_path}: {e}")
+        print(f"Error: Move data not found at {data_path}.")
+        print("Please run the API importer script:")
+        print("python rotomdex/api_importer.py")
         return {}
-
 

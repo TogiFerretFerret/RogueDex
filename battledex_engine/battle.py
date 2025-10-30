@@ -2,9 +2,12 @@
 battledex_engine/battle.py
 
 The main Battle class that orchestrates the entire simulation.
+
+FIX: `submit_actions` now accepts a dictionary of {user_id: action}
+to correctly link actions to their users.
 """
 
-from typing import List, cast
+from typing import List, Dict, cast
 from .state import BattleState, TeamState, CombatantState
 from .interfaces import Action, Ruleset, Combatant
 from .event_queue import EventQueue, Event
@@ -36,7 +39,7 @@ class Battle:
                 if combatant.is_active:
                     # We assume only one combatant is active per team at the start.
                     active_combatant_id = combatant.id
-            
+
             if not active_combatant_id:
                 raise ValueError("A team was provided with no active combatant.")
 
@@ -46,27 +49,40 @@ class Battle:
                     active_combatant_id=active_combatant_id
                 )
             )
-        
+
         return BattleState(teams=team_states)
 
-    def submit_actions(self, actions: List[Action]):
+    def submit_actions(self, actions_map: Dict[str, Action]):
         """
         Players submit their chosen actions for the turn through this method.
-        The actions are sorted by priority and used to generate the initial
-        events for the turn.
+        
+        Args:
+            actions_map: A dictionary mapping combatant_id to their
+                         chosen Action object.
         """
-        # Sort actions by their priority value, highest first.
-        # In Pokémon, this would handle things like Quick Attack (priority 1)
-        # going before Tackle (priority 0).
-        sorted_actions = sorted(actions, key=lambda a: a.priority, reverse=True)
+        # Create a list of (user_id, action) tuples
+        action_pairs = []
+        for user_id, action in actions_map.items():
+            # In a real game, you'd verify that user_id is allowed
+            # to make a move this turn.
+            action_pairs.append((user_id, action))
 
-        for action in sorted_actions:
+        # Sort actions by their priority value, highest first.
+        sorted_pairs = sorted(action_pairs, key=lambda pair: pair[1].priority, reverse=True)
+        # In Pokémon, you would have a secondary sort here by speed,
+        # which would be handled by the ruleset.
+        # For now, priority-only is fine.
+
+        for user_id, action in sorted_pairs:
             # Create a generic event for each action. The ruleset's event handlers
             # will be responsible for interpreting this and creating more specific
             # events (like DAMAGE, STATUS_APPLIED, etc.).
             initial_event = Event(
                 event_type="ACTION_REQUEST",
-                payload={"action": action}
+                payload={
+                    "action": action,
+                    "user_id": user_id  # FIX: Add the user_id!
+                }
             )
             self._event_queue.add(initial_event)
 
@@ -82,5 +98,4 @@ class Battle:
         log = self._event_queue.process_all(self.state)
         self.state.turn_number += 1
         return log
-
 

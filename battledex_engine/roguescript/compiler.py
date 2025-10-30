@@ -4,7 +4,7 @@ The RogueScript Compiler.
 Walks the AST from the Parser and emits bytecode
 into a Chunk for the VM to execute.
 """
-
+from __future__ import annotations # Add this line at the very top
 from . import ast_nodes as ast
 from .bytecode import Chunk, OpCode
 from .token_types import TokenType
@@ -403,5 +403,6 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
             
         # 3. Emit the call instruction with arity
         self._emit_bytes(OpCode.OP_CALL, len(expr.arguments), expr.line)
+
 
 

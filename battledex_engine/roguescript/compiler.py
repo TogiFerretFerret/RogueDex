@@ -9,7 +9,8 @@ from . import ast_nodes as ast
 from .bytecode import Chunk, OpCode
 from .token_types import TokenType
 from .errors import CompileError
-from .vm import RogueScriptFunction # Import the function container
+# Import from the new function.py file, NOT vm.py
+from .function import RogueScriptFunction
 from dataclasses import dataclass
 
 @dataclass
@@ -24,7 +25,7 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
     and generate bytecode.
     """
     def __init__(self, parent_compiler: 'Compiler' | None = None, func_type: str = "script"):
-        self.chunk = Chunk(name="<script>")
+        self.chunk: Chunk = Chunk(name="<script>")
         self.locals: list[Local] = []
         self.scope_depth: int = 0
         self.function: RogueScriptFunction = RogueScriptFunction(name="<script>", arity=0)
@@ -64,9 +65,21 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
         self.scope_depth -= 1
         
         # Pop all local variables that just went out of scope
+        count = 0
         while self.locals and self.locals[-1].depth > self.scope_depth:
             self.locals.pop()
-            self._emit_byte(OpCode.OP_POP, line)
+            count += 1
+        
+        # Emit multiple POPs if needed
+        if count > 0:
+            # Simple optimization: if we just pop one, use OP_POP
+            if count == 1:
+                self._emit_byte(OpCode.OP_POP, line)
+            else:
+                # We could add an OP_POP_N <n> instruction later
+                for _ in range(count):
+                    self._emit_byte(OpCode.OP_POP, line)
+
 
     # --- Emitter Helpers ---
 
@@ -111,6 +124,7 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
     def _emit_constant(self, value: any, line: int):
         const_index = self.chunk.add_constant(value)
         if const_index > 255:
+            # We'd need an OP_PUSH_CONST_LONG (2-byte operand)
             raise CompileError("Too many constants in one chunk.", line)
         self._emit_bytes(OpCode.OP_PUSH_CONST, const_index, line)
 
@@ -262,7 +276,6 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
             raise CompileError("Too many function constants.", stmt.line)
         
         # Emit code to create the function at runtime
-        # (This will be more complex with closures, but simple for now)
         self._emit_bytes(OpCode.OP_PUSH_CONST, const_index, stmt.line)
 
         # Define the function as a variable in the current scope
@@ -360,25 +373,25 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
         expr.left.accept(self)
         
         if op == TokenType.OR:
-            # If left is TRUE, jump over the right side
-            jump_offset = self._emit_jump(OpCode.OP_JUMP_IF_FALSE, expr.line)
-            # This is a bit backward: if it's TRUE, we *don't* jump
-            # so we need another jump to skip the right side
-            skip_jump = self._emit_jump(OpCode.OP_JUMP, expr.line)
+            # If left is TRUE, we skip the right.
+            # We jump *over* the pop and the right-side code
+            else_jump = self._emit_jump(OpCode.OP_JUMP_IF_FALSE, expr.line)
+            end_jump = self._emit_jump(OpCode.OP_JUMP, expr.line)
             
-            self._patch_jump(jump_offset)
+            self._patch_jump(else_jump)
             self._emit_byte(OpCode.OP_POP, expr.line) # Pop left
-            expr.right.accept(self) # Compile right
-            self._patch_jump(skip_jump) # Patch the skip
+            
+            expr.right.accept(self)
+            self._patch_jump(end_jump)
             
         elif op == TokenType.AND:
-            # If left is FALSE, jump over the right side
-            jump_offset = self._emit_jump(OpCode.OP_JUMP_IF_FALSE, expr.line)
+            # If left is FALSE, we skip the right.
+            end_jump = self._emit_jump(OpCode.OP_JUMP_IF_FALSE, expr.line)
             
             self._emit_byte(OpCode.OP_POP, expr.line) # Pop left
             expr.right.accept(self) # Compile right
             
-            self._patch_jump(jump_offset)
+            self._patch_jump(end_jump)
             
     def visit_call_expr(self, expr: ast.CallExpr):
         # 1. Compile the function itself (e.g., the variable 'my_func')

@@ -10,6 +10,8 @@ from .compiler import Compiler
 from .errors import ParseError, CompileError, RogueScriptRuntimeError
 from .lexer import Lexer
 from .parser import Parser
+# Import from the new function.py file
+from .function import RogueScriptFunction, NativeFunction
 from enum import Enum, auto
 from dataclasses import dataclass
 import time # For a native 'clock' function
@@ -19,28 +21,7 @@ class InterpretResult(Enum):
     COMPILE_ERROR = auto()
     RUNTIME_ERROR = auto()
 
-# --- Function Types ---
-
-@dataclass
-class RogueScriptFunction:
-    """A user-defined function compiled to bytecode."""
-    name: str
-    arity: int # Number of parameters
-    chunk: Chunk = field(default_factory=Chunk)
-    
-    def __repr__(self):
-        return f"<fn {self.name}>"
-
-@dataclass
-class NativeFunction:
-    """A wrapper for a Python function exposed to the VM."""
-    name: str
-    callable: callable
-    
-    def __repr__(self):
-        return f"<native fn {self.name}>"
-
-# --- Call Frame ---
+# RogueScriptFunction and NativeFunction are now in function.py
 
 @dataclass
 class CallFrame:
@@ -53,6 +34,9 @@ class CallFrame:
     
     def current_line(self) -> int:
         """Get line number for the *previous* instruction."""
+        # Safe-guard for ip=0
+        if self.ip == 0:
+            return self.function.chunk.lines[0] if self.function.chunk.lines else 1
         return self.function.chunk.lines[self.ip - 1]
 
 # --- Native Functions ---
@@ -130,6 +114,7 @@ class VirtualMachine:
             return (result, value)
 
         except (ParseError, CompileError) as e:
+            # These are now raised, not just printed
             print(e)
             return (InterpretResult.COMPILE_ERROR, None)
         except RogueScriptRuntimeError as e:

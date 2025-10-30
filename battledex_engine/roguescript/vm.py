@@ -112,7 +112,7 @@ class VirtualMachine:
             return (result, value)
 
         except (ParseError, CompileError) as e:
-            # These are now raised, not just printed
+            # FIX: Print the compile-time error
             print(e)
             return (InterpretResult.COMPILE_ERROR, None)
         except RogueScriptRuntimeError as e:
@@ -202,21 +202,20 @@ class VirtualMachine:
                     elif isinstance(a, str) and isinstance(b, str):
                         result = a + b
                     else:
+                        # FIX: Just raise. The 'return' is unreachable.
                         self._runtime_error("Operands must be two numbers or two strings.")
-                        # This part is now unreachable, but we'll leave it
-                        return (InterpretResult.RUNTIME_ERROR, None) 
                 
                 else: # All other ops must be numbers
                     if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+                        # FIX: Just raise.
                         self._runtime_error("Operands must be numbers.")
-                        return (InterpretResult.RUNTIME_ERROR, None)
                     
                     if op == OpCode.OP_SUBTRACT: result = a - b
                     elif op == OpCode.OP_MULTIPLY: result = a * b
                     elif op == OpCode.OP_DIVIDE:
                         if b == 0:
+                            # FIX: Just raise.
                             self._runtime_error("Division by zero.")
-                            return (InterpretResult.RUNTIME_ERROR, None)
                         result = a / b
                     elif op == OpCode.OP_GREATER: result = a > b
                     elif op == OpCode.OP_LESS:   result = a < b
@@ -253,11 +252,8 @@ class VirtualMachine:
                 
                 if not self._call(callee, arg_count):
                     # _call will raise its own error
-                    # This return is for the type checker
-                    return (InterpretResult.RUNTIME_ERROR, None)
+                    pass
             
-            # This is the fix for the SyntaxError
-            # This 'else' ensures the loop is valid
             else:
                 self._runtime_error(f"Unknown opcode {op}")
                 

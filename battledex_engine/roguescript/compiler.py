@@ -41,7 +41,8 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
         
         if func_type != "script":
             # Add a stack slot for the function itself (for recursion)
-            self.locals.append(Local(ast.Token(TokenType.IDENTIFIER, "", 0, 0), 0))
+            # FIX: Removed extra '0' arg. Token() takes (type, value, line).
+            self.locals.append(Local(ast.Token(TokenType.IDENTIFIER, "", 0), 0))
         
     def compile(self, program: ast.Program) -> RogueScriptFunction:
         """
@@ -424,5 +425,6 @@ class Compiler(ast.ExprVisitor, ast.StmtVisitor):
             
         # 3. Emit the call instruction with arity
         self._emit_bytes(OpCode.OP_CALL, len(expr.arguments), expr.line)
+
 
 

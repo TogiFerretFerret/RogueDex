@@ -8,4 +8,4 @@ and this is it
 so yeah
 low quality code
 sorry about that
-its not competitive programming quality ¯\_(ツ)_/¯
+its not competitive programming quality ¯\\_(ツ)_/¯

@@ -215,6 +215,8 @@ class Connection:
                     # to match the new sequence number and mark the bit for the
                     # *previous* latest sequence number as received.
                     self._ack_bitfield = (self._ack_bitfield << diff) | (1 << (diff - 1))
+                    # FIX: Mask to 16 bits to prevent overflow
+                    self._ack_bitfield &= 0xFFFF
                 else:
                     # The gap is too large; the old bitfield is irrelevant.
                     self._ack_bitfield = 0
@@ -224,6 +226,8 @@ class Connection:
             diff = self._remote_sequence_number - seq
             if diff <= 16:
                 self._ack_bitfield |= (1 << (diff - 1))
+                # FIX: Mask to 16 bits to prevent overflow
+                self._ack_bitfield &= 0xFFFF
 
     def _process_acks(self, ack: int, bitfield: int):
         """Removes acknowledged packets from the sent packets buffer."""

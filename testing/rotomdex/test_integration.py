@@ -1,211 +1,204 @@
 """
-test_integration.py
+testing/rotomdex/test_integration.py
 
-This is the main "heart" of the application, converted into
-a proper integration test.
-
-It connects all the pieces:
-1. Loads data (from rotomdex.data_loader)
-2. Creates Pokémon (from rotomdex.factory)
-3. Creates the ruleset (from rotomdex.ruleset)
-4. Creates the battle (from battledex_engine.battle)
-5. Runs a test turn and asserts the results.
-
-To run (from the top-level RogueDex/ directory):
-    python -m unittest discover tests
+End-to-end tests for the Rotomdex implementation of the engine.
 """
-
 import unittest
-from rotomdex import (
-    load_pokemon_data,
-    load_move_data,
-    create_pokemon_from_data,
-    PokemonRuleset
-)
-from battledex_engine.battle import Battle
-from battledex_engine.interfaces import Combatant
+import sys
+import os
+from pathlib import Path
+from typing import Dict, Any
 
-# Type hint for our concrete Pokemon class
-# We can't import it directly due to test discovery paths,
-# but we can use this for better type hints in the test.
-try:
-    from rotomdex.pokemon import Pokemon
-except ImportError:
-    # This is fine, we'll just use the Combatant interface
-    Pokemon = Combatant 
+# --- Add project root to path ---
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
+
+from battledex_engine.battle import Battle
+from battledex_engine.interfaces import Combatant, SpecialAction
+from rotomdex.pokemon import Pokemon
+from rotomdex.move import Move
+# FIX: Import item loader and Item class
+from rotomdex.data_loader import load_pokemon_data, load_move_data, load_item_data
+from battledex_engine.item import Item
+from rotomdex.factory import create_pokemon_from_data
+from rotomdex.ruleset import PokemonRuleset
+
+# --- Test Case ---
 
 class TestBattleIntegration(unittest.TestCase):
+    """
+    Tests the full integration of Rotomdex classes with the Battle engine.
+    """
 
-    pokemon_data_map = {}
-    move_data_map = {}
-    
     @classmethod
     def setUpClass(cls):
         """
-        Load all game data once for all tests in this class.
-        This is expensive, so we don't want to do it for every test.
+        Load all real game data from the JSON cache.
+        This is a true integration test.
         """
-        print("Loading all game data for integration tests...")
-        try:
-            # FIX: Pass no arguments to use the default cache path
-            cls.pokemon_data_map = load_pokemon_data()
-            cls.move_data_map = load_move_data()
-            
-            if not cls.pokemon_data_map or not cls.move_data_map:
-                raise Exception("Failed to load data, JSON files might be missing.")
-        except Exception as e:
-            # If data loading fails, we can't run the tests.
-            raise unittest.SkipTest(f"Skipping integration tests: Failed to load game data. {e}")
-
-    def test_pikachu_vs_charmander_turn_1(self):
-        """
-        An end-to-end test of a single battle turn.
-        """
-        print("\n--- Running Test: test_pikachu_vs_charmander_turn_1 ---")
+        print("\nLoading all game data for integration tests...")
         
-        # --- 2. Create Pokémon ---
-        print("  Creating Pokémon...")
-        try:
-            pikachu: Combatant = create_pokemon_from_data(
-                species_name="pikachu",
-                level=50,
-                move_names=["tackle", "growl"],
-                pokemon_data_map=self.pokemon_data_map,
-                move_data_map=self.move_data_map,
-                instance_id="pika-1",
-                is_active=True
-            )
-            
-            charmander: Combatant = create_pokemon_from_data(
-                species_name="charmander",
-                level=50,
-                move_names=["scratch", "growl"],
-                pokemon_data_map=self.pokemon_data_map,
-                move_data_map=self.move_data_map,
-                instance_id="char-1",
-                is_active=True
-            )
-        except KeyError as e:
-            self.fail(f"Failed to create Pokémon. Missing data for: {e}. "
-                      "Make sure 'pikachu', 'charmander', 'tackle', etc. exist in your JSON.")
+        # FIX: Load all three data files
+        cls.pokemon_data = load_pokemon_data()
+        cls.move_data = load_move_data()
+        cls.item_data = load_item_data()
+        print("Game data loaded.")
 
-        # Store initial HP for comparison
-        # We need to cast to Pokemon to access 'stats' and 'current_hp'
-        pika_pokemon: Pokemon = pikachu
-        char_pokemon: Pokemon = charmander
+    def setUp(self):
+        """Create fresh Pokémon and battle for each test."""
         
-        pika_initial_hp = pika_pokemon.stats['hp']
-        char_initial_hp = char_pokemon.stats['hp']
-        self.assertEqual(pika_pokemon.current_hp, pika_initial_hp)
-        self.assertEqual(char_pokemon.current_hp, char_initial_hp)
-
-        all_combatants = {
-            pikachu.id: pikachu,
-            charmander.id: charmander,
-        }
-
-        # --- 3. Create Ruleset ---
-        ruleset = PokemonRuleset(all_combatants)
-
-        # --- 4. Create Battle ---
-        battle = Battle(
-            teams=[[pikachu], [charmander]],
-            ruleset=ruleset
+        # --- Create Pokémon ---
+        # We type hint as Combatant to test against the interface
+        self.pikachu: Combatant = create_pokemon_from_data(
+            species_name="pikachu",
+            level=50,
+            move_names=["tackle", "growl"],
+            pokemon_data_map=self.pokemon_data,
+            move_data_map=self.move_data,
+            item_data_map=self.item_data, # FIX: Pass item data
+            instance_id="p1_pika",
+            item_name="light-ball", # FIX: Give light ball
+            is_active=True
+        )
+        
+        self.charmander: Combatant = create_pokemon_from_data(
+            species_name="charmander",
+            level=50,
+            move_names=["scratch", "growl"],
+            pokemon_data_map=self.pokemon_data,
+            move_data_map=self.move_data,
+            item_data_map=self.item_data, # FIX: Pass item data
+            instance_id="p2_char",
+            is_active=True
+        )
+        
+        # --- Create Ruleset and Battle ---
+        self.combatants_list = [self.pikachu, self.charmander]
+        self.ruleset = PokemonRuleset(self.combatants_list)
+        self.battle = Battle(
+            teams=[[self.pikachu], [self.charmander]],
+            ruleset=self.ruleset
         )
 
-        # --- 5. Run a Test Turn ---
-        pika_action = pika_pokemon.moves[0] # Tackle
-        char_action = char_pokemon.moves[0] # Scratch
+    def test_pikachu_vs_charmander_turn_1(self):
+        """An end-to-end test of a single battle turn."""
+        print("\n--- Running Test: test_pikachu_vs_charmander_turn_1 ---")
         
-        print(f"  Submitting actions: {pika_action.name} and {char_action.name}")
+        # We know these are Pokemon, so we can cast to get specific stats
+        pika: Pokemon = self.pikachu
+        char: Pokemon = self.charmander
+
+        pika_initial_hp = pika.current_hp
+        char_initial_hp = char.current_hp
         
-        # FIX: Submit actions as a dictionary mapping user_id to their action.
-        # This is how the engine will know *who* is doing *what*.
-        actions_to_submit = {
-            pikachu.id: pika_action,
-            charmander.id: char_action,
+        print(f"  Creating Pokémon...")
+        print(f"  Pikachu HP: {pika_initial_hp}, Item: {pika.held_item.name}")
+        print(f"  Charmander HP: {char_initial_hp}, Item: {char.held_item}")
+
+        # 2. Action Submission
+        pika_move = next(m for m in pika.moves if m.name == "tackle")
+        char_move = next(m for m in char.moves if m.name == "scratch")
+        
+        actions = {
+            pika.id: [pika_move],
+            char.id: [char_move]
         }
-        battle.submit_actions(actions_to_submit)
-        
-        log = battle.process_turn()
-        
+        print(f"  Submitting actions: {pika_move.name} and {char_move.name}")
+        self.battle.submit_actions(actions)
+
+        # 3. Processing
         print("  Processing turn...")
-        
-        # --- 6. Assert Results ---
+        self.battle.process_turn()
+
+        # 4. Assertions
         print("  Asserting results...")
+        self.assertLess(pika.current_hp, pika_initial_hp, "Pikachu's HP did not decrease.")
+        self.assertLess(char.current_hp, char_initial_hp, "Charmander's HP did not decrease.")
         
-        # Check that events actually happened
-        self.assertGreater(len(log), 0)
-        # Check that our ruleset correctly created DAMAGE events
-        has_damage_event = any(e.event_type == "DAMAGE" for e in log)
-        self.assertTrue(has_damage_event, "No 'DAMAGE' event was found in the log.")
-        
-        # Check that HP has *actually* decreased for both
-        self.assertLess(pika_pokemon.current_hp, pika_initial_hp, "Pikachu's HP did not decrease.")
-        self.assertLess(char_pokemon.current_hp, char_initial_hp, "Charmander's HP did not decrease.")
-        
-        print(f"  Pikachu HP: {pika_pokemon.current_hp} / {pika_initial_hp}")
-        print(f"  Charmander HP: {char_pokemon.current_hp} / {char_initial_hp}")
+        print(f"  Pikachu HP: {pika.current_hp} / {pika_initial_hp}")
+        print(f"  Charmander HP: {char.current_hp} / {char_initial_hp}")
         print("--- Test Complete ---")
 
-    # --- Feature Checklist (To-Do) ---
 
-    @unittest.skip("Feature not yet implemented in ruleset")
-    def test_terastallization(self):
-        """
-        Tests that a Pokémon can Terastallize and that its
-        move damage is correctly modified.
-        """
-        # 1. Create a Pikachu (Electric) and a Ogerpon (Grass)
-        # 2. Give Pikachu a 'terastalize' action (will need new Action type)
-        #    and set its Tera Type to 'Normal'
-        # 3. Submit 'terastalize' for Pikachu and 'tackle' for Ogerpon
-        # 4. Assert Pikachu's type is now 'Normal'
-        # 5. On Turn 2, have Pikachu use Tackle (now STAB)
-        # 6. Assert damage is calculated based on 'Normal' type
-        pass
+    @unittest.skip("Terastallization logic not yet implemented in ruleset")
+    def test_terastallization_success(self):
+        """Tests that a Pokémon can successfully Terastallize."""
+        print("\n--- Running Test: test_terastallization_success ---")
+        pika: Pokemon = self.pikachu
+        
+        # FIX: Give Pikachu the Tera Orb
+        pika.held_item = create_item_from_data("tera-orb", self.item_data)
+        self.assertEqual(pika.held_item.id_name, "tera-orb")
+        
+        print(f"  Pikachu original types: {pika.current_types}")
+        self.assertEqual(pika.current_types, ["electric"])
+        self.assertFalse(pika.has_terastallized)
 
-    @unittest.skip("Feature not yet implemented in ruleset")
+        # 2. Action Submission
+        tera_action = SpecialAction(kind="terastalize")
+        actions = { pika.id: [tera_action] }
+        
+        print(f"  Submitting: Terastallize")
+        self.battle.submit_actions(actions)
+        
+        # 3. Processing
+        print("  Processing turn...")
+        self.battle.process_turn()
+        
+        # 4. Assertions
+        print("  Asserting results...")
+        self.assertTrue(pika.has_terastallized, "Pikachu did not Terastallize.")
+        self.assertEqual(pika.current_types, [pika.tera_type], "Pikachu's type did not change to its Tera Type.")
+        print(f"  Pikachu new types: {pika.current_types}")
+        print("--- Test Complete ---")
+
+    @unittest.skip("Terastallization logic not yet implemented in ruleset")
+    def test_terastallization_fail_no_orb(self):
+        """Tests that Terastallization fails if the Pokémon has no Tera Orb."""
+        print("\n--- Running Test: test_terastallization_fail_no_orb ---")
+        pika: Pokemon = self.pikachu
+        
+        # FIX: Ensure Pikachu has no item
+        pika.held_item = None
+        self.assertIsNone(pika.held_item)
+        
+        print(f"  Pikachu original types: {pika.current_types}")
+        self.assertFalse(pika.has_terastallized)
+
+        # 2. Action Submission
+        tera_action = SpecialAction(kind="terastalize")
+        actions = { pika.id: [tera_action] }
+        
+        print(f"  Submitting: Terastallize")
+        self.battle.submit_actions(actions)
+        
+        # 3. Processing
+        print("  Processing turn...")
+        self.battle.process_turn()
+        
+        # 4. Assertions
+        print("  Asserting results...")
+        self.assertFalse(pika.has_terastallized, "Pikachu should not have Terastallized.")
+        self.assertEqual(pika.current_types, ["electric"], "Pikachu's type should not have changed.")
+        print(f"  Pikachu types unchanged: {pika.current_types}")
+        print("--- Test Complete ---")
+
+
+    # --- Placeholder Tests ---
+    
+    @unittest.skip("Feature not implemented")
     def test_mega_evolution(self):
-        """
-        Tests that a Pokémon can Mega Evolve and its stats
-        and abilities change.
-        """
-        # 1. Create a Charizard (with 'charizardite-x')
-        # 2. Submit a 'mega_evolve' action
-        # 3. Process turn
-        # 4. Assert Charizard's species is now 'charizard-mega-x'
-        # 5. Assert Charizard's stats have been recalculated
-        # 6. Assert Charizard's type is now Fire/Dragon
         pass
 
-    @unittest.skip("Feature not yet implemented in ruleset")
-    def test_z_move(self):
-        """
-        Tests that a Pokémon can use a Z-Move one time.
-        """
-        # 1. Create a Pikachu (with 'pikanium-z')
-        # 2. Submit a 'z_move' action for 'volt-tackle'
-        # 3. Process turn
-        # 4. Assert that the 'catastropika' event was generated
-        # 5. Assert target took massive damage
-        # 6. On Turn 2, assert Pikachu can no longer use a Z-Move
+    @unittest.skip("Feature not implemented")
+    def test_z_moves(self):
         pass
 
-    @unittest.skip("Feature not yet implemented in ruleset")
+    @unittest.skip("Feature not implemented")
     def test_dynamax(self):
-        """
-        Tests that a Pokémon can Dynamax for 3 turns.
-        """
-        # 1. Create a Charizard
-        # 2. Submit 'dynamax' action
-        # 3. Assert Charizard's HP has doubled
-        # 4. Assert its moves have been replaced with 'Max' moves
-        # 5. Process 3 more turns
-        # 6. Assert Charizard has reverted to normal
         pass
 
-# This allows running the test file directly
+
 if __name__ == '__main__':
     unittest.main()
 

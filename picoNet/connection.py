@@ -115,6 +115,29 @@ class Connection:
         self._socket.send(self.remote_address, packed_data)
         self._sent_packets[self._sequence_number] = (time.time(), packed_data)
         self._sequence_number = (self._sequence_number + 1) % 65536
+    def send_ack_only(self):
+        """
+        Sends an ACK-only packet without incrementing the sequence number.
+        This is used to acknowledge received packets without sending new data.
+        """
+        if self.state != ConnectionState.CONNECTED:
+            return
+        
+        if self._remote_sequence_number == -1:
+            return  # Nothing to ACK yet
+        
+        # Create a packet with empty payload that only carries ACK information
+        # Use sequence number 0 and don't track this packet for retransmission
+        header = PacketHeader(
+            protocol_id=12345,
+            sequence=0,  # Special sequence 0 for ACK-only packets
+            ack=self._remote_sequence_number,
+            ack_bitfield=self._ack_bitfield
+        )
+        packet = Packet(header=header, payload=b'')  # Empty payload
+        packed_data = pack_packet(packet)
+        self._socket.send(self.remote_address, packed_data)
+        # Don't add to _sent_packets - we don't need to track ACK-only packets
 
     def receive(self) -> List[Any]:
         """
@@ -201,11 +224,16 @@ class Connection:
         seq = packet.header.sequence
         self._process_acks(packet.header.ack, packet.header.ack_bitfield)
 
+        # Ignore ACK-only packets (sequence 0 with empty payload)
+        if seq == 0 and len(packet.payload) == 0:
+            return  # This is just an ACK, don't process as data
+        
         if seq in self._received_sequences:
             return
         
         self._received_sequences.append(seq)
-        self._received_payloads.append(deserialize(packet.payload))
+        if packet.payload:  # Only deserialize if there's actual data
+            self._received_payloads.append(deserialize(packet.payload))
 
         if self._remote_sequence_number == -1 or is_sequence_greater(seq, self._remote_sequence_number):
             if self._remote_sequence_number != -1:
@@ -215,7 +243,7 @@ class Connection:
                     # to match the new sequence number and mark the bit for the
                     # *previous* latest sequence number as received.
                     self._ack_bitfield = (self._ack_bitfield << diff) | (1 << (diff - 1))
-                    # FIX: Mask to 16 bits to prevent overflow
+                    # Mask to 16 bits to prevent overflow
                     self._ack_bitfield &= 0xFFFF
                 else:
                     # The gap is too large; the old bitfield is irrelevant.
@@ -226,9 +254,8 @@ class Connection:
             diff = self._remote_sequence_number - seq
             if diff <= 16:
                 self._ack_bitfield |= (1 << (diff - 1))
-                # FIX: Mask to 16 bits to prevent overflow
+                # Mask to 16 bits to prevent overflow
                 self._ack_bitfield &= 0xFFFF
-
     def _process_acks(self, ack: int, bitfield: int):
         """Removes acknowledged packets from the sent packets buffer."""
         if ack in self._sent_packets:

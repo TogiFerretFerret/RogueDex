@@ -31,7 +31,7 @@ class Combatant(ABC):
         pass
 
     @property
-    @abstractabstractmethod
+    @abstractmethod
     def is_active(self) -> bool:
         """Is this combatant currently the active one on its team?"""
         pass

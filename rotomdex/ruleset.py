@@ -81,11 +81,28 @@ class PokemonRuleset(Ruleset):
         print(f"Ruleset: {user.species_name} used {move.name} on {target.species_name}!")
         
         # --- Basic Damage Calculation ---
-        # This is where your Terastal, Mega, etc. logic would go.
+
+        # Get the attacker's relevant offensive stat
+        # (This is simplified, a real calc would check move.category)
+        offensive_stat = user.stats.get("attack", 0)
+
+        # --- NEW: Check for Item Effects ---
+        if user.held_item:
+            if user.held_item.name == "light-ball" and user.species_name == "pikachu":
+                print(f"Ruleset: {user.species_name}'s Light Ball flares up!")
+                offensive_stat *= 2  # Apply the modifier ON-THE-FLY
+
+            # You would add more item checks here
+            # elif user.held_item.name == "choice-band":
+            #    offensive_stat = int(offensive_stat * 1.5)
+
+        # ---
+
+
         damage = 10 # A placeholder
         if move.power:
-            # A very simple, non-Poké formula for testing
-            damage = move.power + user.stats.get("attack", 0) // 5
+            # Use the MODIFIED stat in your formula
+            damage = move.power + offensive_stat // 5
         
         # Create a new "DAMAGE" event
         damage_event = Event(

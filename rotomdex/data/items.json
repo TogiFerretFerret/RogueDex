@@ -12628,5 +12628,425 @@
     "name": "TM172",
     "fling_power": null,
     "effect": null
+  },
+  "tm173": {
+    "id": 2162,
+    "name": "TM173",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm174": {
+    "id": 2163,
+    "name": "TM174",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm175": {
+    "id": 2164,
+    "name": "TM175",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm176": {
+    "id": 2165,
+    "name": "TM176",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm177": {
+    "id": 2166,
+    "name": "TM177",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm178": {
+    "id": 2167,
+    "name": "TM178",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm179": {
+    "id": 2168,
+    "name": "TM179",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm180": {
+    "id": 2169,
+    "name": "TM180",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm181": {
+    "id": 2170,
+    "name": "TM181",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm182": {
+    "id": 2171,
+    "name": "TM182",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm183": {
+    "id": 2172,
+    "name": "TM183",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm184": {
+    "id": 2173,
+    "name": "TM184",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm185": {
+    "id": 2174,
+    "name": "TM185",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm186": {
+    "id": 2175,
+    "name": "TM186",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm187": {
+    "id": 2176,
+    "name": "TM187",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm188": {
+    "id": 2177,
+    "name": "TM188",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm189": {
+    "id": 2178,
+    "name": "TM189",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm190": {
+    "id": 2179,
+    "name": "TM190",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm191": {
+    "id": 2180,
+    "name": "TM191",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm192": {
+    "id": 2181,
+    "name": "TM192",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm193": {
+    "id": 2182,
+    "name": "TM193",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm194": {
+    "id": 2183,
+    "name": "TM194",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm195": {
+    "id": 2184,
+    "name": "TM195",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm196": {
+    "id": 2185,
+    "name": "TM196",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm197": {
+    "id": 2186,
+    "name": "TM197",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm198": {
+    "id": 2187,
+    "name": "TM198",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm199": {
+    "id": 2188,
+    "name": "TM199",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm200": {
+    "id": 2189,
+    "name": "TM200",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm201": {
+    "id": 2190,
+    "name": "TM201",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm202": {
+    "id": 2191,
+    "name": "TM202",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm203": {
+    "id": 2192,
+    "name": "TM203",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm204": {
+    "id": 2193,
+    "name": "TM204",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm205": {
+    "id": 2194,
+    "name": "TM205",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm206": {
+    "id": 2195,
+    "name": "TM206",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm207": {
+    "id": 2196,
+    "name": "TM207",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm208": {
+    "id": 2197,
+    "name": "TM208",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm209": {
+    "id": 2198,
+    "name": "TM209",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm210": {
+    "id": 2199,
+    "name": "TM210",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm211": {
+    "id": 2200,
+    "name": "TM211",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm212": {
+    "id": 2201,
+    "name": "TM212",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm213": {
+    "id": 2202,
+    "name": "TM213",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm214": {
+    "id": 2203,
+    "name": "TM214",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm215": {
+    "id": 2204,
+    "name": "TM215",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm216": {
+    "id": 2205,
+    "name": "TM216",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm217": {
+    "id": 2206,
+    "name": "TM217",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm218": {
+    "id": 2207,
+    "name": "TM218",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm219": {
+    "id": 2208,
+    "name": "TM219",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm220": {
+    "id": 2209,
+    "name": "TM220",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm221": {
+    "id": 2210,
+    "name": "TM221",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm222": {
+    "id": 2211,
+    "name": "TM222",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm223": {
+    "id": 2212,
+    "name": "TM223",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm224": {
+    "id": 2213,
+    "name": "TM224",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm225": {
+    "id": 2214,
+    "name": "TM225",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm226": {
+    "id": 2215,
+    "name": "TM226",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm227": {
+    "id": 2216,
+    "name": "TM227",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm228": {
+    "id": 2217,
+    "name": "TM228",
+    "fling_power": null,
+    "effect": null
+  },
+  "tm229": {
+    "id": 2218,
+    "name": "TM229",
+    "fling_power": null,
+    "effect": null
+  },
+  "lastrange-ball": {
+    "id": 2219,
+    "name": "Strange Ball",
+    "fling_power": null,
+    "effect": null
+  },
+  "lapoke-ball": {
+    "id": 2220,
+    "name": "Poké Ball",
+    "fling_power": null,
+    "effect": null
+  },
+  "lagreat-ball": {
+    "id": 2221,
+    "name": "Great Ball",
+    "fling_power": null,
+    "effect": null
+  },
+  "laultra-ball": {
+    "id": 2222,
+    "name": "Ultra Ball",
+    "fling_power": null,
+    "effect": null
+  },
+  "laheavy-ball": {
+    "id": 2223,
+    "name": "Heavy Ball",
+    "fling_power": null,
+    "effect": null
+  },
+  "laleaden-ball": {
+    "id": 2224,
+    "name": "Leaden Ball",
+    "fling_power": null,
+    "effect": null
+  },
+  "lagigaton-ball": {
+    "id": 2225,
+    "name": "Gigaton Ball",
+    "fling_power": null,
+    "effect": null
+  },
+  "lafeather-ball": {
+    "id": 2226,
+    "name": "Feather Ball",
+    "fling_power": null,
+    "effect": null
+  },
+  "lawing-ball": {
+    "id": 2227,
+    "name": "Wing Ball",
+    "fling_power": null,
+    "effect": null
+  },
+  "lajet-ball": {
+    "id": 2228,
+    "name": "Jet Ball",
+    "fling_power": null,
+    "effect": null
+  },
+  "laorigin-ball": {
+    "id": 2229,
+    "name": "Origin Ball",
+    "fling_power": null,
+    "effect": null
+  },
+  "black-augurite": {
+    "id": 10001,
+    "name": "Unknown",
+    "fling_power": null,
+    "effect": null
+  },
+  "peat-block": {
+    "id": 10002,
+    "name": "Unknown",
+    "fling_power": null,
+    "effect": null
   }
 }

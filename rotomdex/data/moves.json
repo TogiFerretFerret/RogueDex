@@ -9298,5 +9298,75 @@
     "accuracy": 100,
     "pp": null,
     "priority": 0
+  },
+  "shadow-down": {
+    "id": 10012,
+    "name": "Shadow Down",
+    "move_type": "shadow",
+    "category": "status",
+    "power": null,
+    "accuracy": 100,
+    "pp": null,
+    "priority": 0
+  },
+  "shadow-half": {
+    "id": 10013,
+    "name": "Shadow Half",
+    "move_type": "shadow",
+    "category": "special",
+    "power": null,
+    "accuracy": 100,
+    "pp": null,
+    "priority": 0
+  },
+  "shadow-hold": {
+    "id": 10014,
+    "name": "Shadow Hold",
+    "move_type": "shadow",
+    "category": "status",
+    "power": null,
+    "accuracy": null,
+    "pp": null,
+    "priority": 0
+  },
+  "shadow-mist": {
+    "id": 10015,
+    "name": "Shadow Mist",
+    "move_type": "shadow",
+    "category": "status",
+    "power": null,
+    "accuracy": 100,
+    "pp": null,
+    "priority": 0
+  },
+  "shadow-panic": {
+    "id": 10016,
+    "name": "Shadow Panic",
+    "move_type": "shadow",
+    "category": "status",
+    "power": null,
+    "accuracy": 90,
+    "pp": null,
+    "priority": 0
+  },
+  "shadow-shed": {
+    "id": 10017,
+    "name": "Shadow Shed",
+    "move_type": "shadow",
+    "category": "status",
+    "power": null,
+    "accuracy": null,
+    "pp": null,
+    "priority": 0
+  },
+  "shadow-sky": {
+    "id": 10018,
+    "name": "Shadow Sky",
+    "move_type": "shadow",
+    "category": "status",
+    "power": null,
+    "accuracy": null,
+    "pp": null,
+    "priority": 0
   }
 }

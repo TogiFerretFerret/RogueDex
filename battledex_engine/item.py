@@ -1,21 +1,25 @@
 """
-battledex-engine/item.py
+battledex_engine/item.py
 
-Defines the class for an Item.
+The interface for an Item.
+
+FIX: Added 'id_name' to store the lowercase,-hyphenated
+key for this item, in addition to its proper 'name'.
+This matches the expectation of test_factory.py.
 """
 
-from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from dataclasses import dataclass
 
 @dataclass
 class Item:
     """
-    Represents a generalized item that a Combatant can hold or use.
+    Represents an item that a Combatant can hold.
+    This is a simple data-holding class; all logic
+    is handled by the Ruleset.
     """
-    name: str
+    id_name: str  # The unique key, e.g., "light-ball"
+    name: str     # The proper name, e.g., "Light Ball"
     fling_power: int | None
-    attributes: List[str] = field(default_factory=list)
-    # 'attributes' can be things like:
-    # 'holdable', 'usable-in-battle', 'consumable'
-
-
+    
+    # You could add other fields here later, like:
+    # effect_description: str

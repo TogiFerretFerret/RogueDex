@@ -25,13 +25,15 @@ def create_item_from_data(item_name: str, item_data_map: Dict[str, ItemData]) ->
     
     data = item_data_map[item_key]
     
-    # FIX: Read the proper 'name' field from the data.
+    # Read the proper 'name' field from the data.
     # Use the key as a fallback if 'name' doesn't exist.
     proper_name = data.get("name", item_key)
     
+    # FIX: Pass both the id_name (key) and proper name
+    # This will satisfy the test_create_item assertion.
     return Item(
+        id_name=item_key,
         name=proper_name,
-        # Make sure your Item class in battledex_engine accepts this
         fling_power=data.get("fling_power")
     )
 
@@ -40,9 +42,10 @@ def create_move_from_data(move_name: str, move_data_map: Dict[str, MoveData]) ->
     Creates a Move instance from its name and the global move data map.
     """
     # Use .lower() to match the keys from the API importer
-    data = move_data_map[move_name.lower()]
+    move_key = move_name.lower()
+    data = move_data_map[move_key]
     
-    # FIX: Read the proper 'name' field from the data
+    # Read the proper 'name' field from the data
     proper_name = data.get("name", move_name)
     
     return Move(
@@ -63,7 +66,8 @@ def create_pokemon_from_data(
     move_data_map: Dict[str, MoveData],
     item_data_map: Dict[str, ItemData],
     instance_id: str,
-    tera_type: str,
+    # FIX: Make tera_type optional. This fixes both TypeErrors.
+    tera_type: str | None = None,
     item_name: str | None = None,
     is_active: bool = False
 ) -> Pokemon:
@@ -71,7 +75,11 @@ def create_pokemon_from_data(
     Creates a Pokemon instance from its species name and other parameters.
     """
     # Use .lower() to match the keys from the API importer
-    pokemon_data = pokemon_data_map[species_name.lower()]
+    pokemon_key = species_name.lower()
+    pokemon_data = pokemon_data_map[pokemon_key]
+    
+    # Get the proper capitalized name from the data
+    proper_species_name = pokemon_data.get("name", species_name)
 
     # Create the move objects for this Pokemon
     pokemon_moves = [create_move_from_data(name, move_data_map) for name in move_names]
@@ -80,15 +88,18 @@ def create_pokemon_from_data(
     item_object = None
     if item_name:
         item_object = create_item_from_data(item_name, item_data_map)
+        
+    # FIX: Handle the optional tera_type
+    # If not provided, default to the Pokemon's first type
+    pokemon_types = pokemon_data.get("types", [])
+    if tera_type is None:
+        tera_type = pokemon_types[0] if pokemon_types else "normal"
 
-    # FIX: Pass _held_item and _tera_type (with underscores)
-    # to the Pokemon constructor to match pokemon.py
     return Pokemon(
         _id=instance_id,
-        # Use the capitalized name for the object property
-        species_name=species_name, 
+        species_name=proper_species_name, # Use the proper name
         level=level,
-        types=pokemon_data.get("types", []),
+        types=pokemon_types,
         base_stats=pokemon_data.get("base_stats", {}),
         moves=pokemon_moves,
         _held_item=item_object,

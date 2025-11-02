@@ -99,3 +99,4 @@ class Battle:
         self.state.turn_number += 1
         return log
 
+

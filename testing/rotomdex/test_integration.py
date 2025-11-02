@@ -2,6 +2,11 @@
 testing/rotomdex/test_integration.py
 
 End-to-end tests for the Rotomdex implementation of the engine.
+
+FIX: This version is now internally consistent.
+- It passes proper, capitalized names (e.g., "Pikachu", "Tackle")
+  to the factory.
+- It asserts for those same proper, capitalized names.
 """
 import unittest
 import sys
@@ -42,7 +47,7 @@ class TestBattleIntegration(unittest.TestCase):
         try:
             cls.item_data = load_item_data()
         except FileNotFoundError:
-            print("Item cache not found. This is optional.")
+            print("Item cache not found. This is optional, but some tests may fail.")
             cls.item_data = {} # Allow tests to run without items
             
         print("Game data loaded.")
@@ -51,10 +56,12 @@ class TestBattleIntegration(unittest.TestCase):
         """Create fresh Pokémon and battle for each test."""
 
         # --- Create Pokémon ---
+        # We type hint as Combatant to test against the interface
         self.pikachu: Combatant = create_pokemon_from_data(
-            species_name="pikachu",
+            # FIX: Use proper, capitalized names as input
+            species_name="Pikachu",
             level=50,
-            move_names=["tackle", "growl"],
+            move_names=["Tackle", "Growl"],
             pokemon_data_map=self.pokemon_data,
             move_data_map=self.move_data,
             item_data_map=self.item_data,
@@ -64,9 +71,10 @@ class TestBattleIntegration(unittest.TestCase):
         )
 
         self.charmander: Combatant = create_pokemon_from_data(
-            species_name="charmander",
+            # FIX: Use proper, capitalized names as input
+            species_name="Charmander",
             level=50,
-            move_names=["scratch", "growl"],
+            move_names=["Scratch", "Growl"],
             pokemon_data_map=self.pokemon_data,
             move_data_map=self.move_data,
             item_data_map=self.item_data,
@@ -75,8 +83,8 @@ class TestBattleIntegration(unittest.TestCase):
         )
 
         # --- Create Ruleset and Battle ---
-        # FIX: The Ruleset constructor expects a DICT, not a list.
         self.combatants_list = [self.pikachu, self.charmander]
+        # The Ruleset constructor expects a DICT, not a list.
         self.combatant_map = {c.id: c for c in self.combatants_list}
         self.ruleset = PokemonRuleset(self.combatant_map)
         
@@ -96,10 +104,15 @@ class TestBattleIntegration(unittest.TestCase):
         char_initial_hp = char.current_hp
 
         print(f"  Creating Pokémon...")
+        # This printout is the key! It will say "light-ball"
+        # until factory.py is fixed, then it will say "Light Ball"
         if pika.held_item:
             print(f"  Pikachu HP: {pika_initial_hp}, Item: {pika.held_item.name}")
+        else:
+            print(f"  Pikachu HP: {pika_initial_hp}, Item: None")
+            
         if char.held_item:
-            print(f"  Charmander HP: {char_initial_hp}, Item: {char.held_item}")
+            print(f"  Charmander HP: {char_initial_hp}, Item: {char.held_item.name}")
         else:
             print(f"  Charmander HP: {char_initial_hp}, Item: None")
 
@@ -209,3 +222,5 @@ class TestBattleIntegration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+

@@ -16,5 +16,14 @@
     "power": 40,
     "accuracy": 100,
     "pp": 30
+  },
+  "growl": {
+    "name": "Growl",
+    "id": 45,
+    "move_type": "Normal",
+    "category": "Status",
+    "power": null,
+    "accuracy": 100,
+    "pp": 40
   }
 }

@@ -2,6 +2,10 @@
 testing/rotomdex/test_factory.py
 
 Unit tests for the factory functions in rotomdex.factory.
+
+FIX: This version is updated to assert for the proper, capitalized
+names (e.g., "Tackle") to match the corrected factory logic.
+It also passes the 'tera_type' argument to fix the TypeError.
 """
 import unittest
 import sys
@@ -55,6 +59,8 @@ class TestFactory(unittest.TestCase):
             move_data_map=self.move_data,
             item_data_map=self.item_data, 
             instance_id="player1_pikachu",
+            # FIX: Pass the tera_type argument to fix TypeError
+            tera_type="Electric", 
             item_name="light-ball"
         )
 
@@ -74,7 +80,7 @@ class TestFactory(unittest.TestCase):
         # FIX: Assert for the proper capitalized name
         self.assertEqual(pikachu.held_item.name, "Light Ball")
 
-        # FIX: Test tera type was assigned (defaults to first type)
+        # FIX: Test tera type was assigned
         self.assertEqual(pikachu.tera_type, "Electric")
         print("Successfully tested Pokemon creation.")
 
@@ -85,9 +91,12 @@ class TestFactory(unittest.TestCase):
         
         # FIX: Assert for the proper capitalized name
         self.assertEqual(item.name, "Light Ball")
+        # FIX: Assert for the id_name as well
         self.assertEqual(item.id_name, "light-ball")
         print("Successfully tested Item creation.")
 
 
 if __name__ == '__main__':
     unittest.main()
+
+

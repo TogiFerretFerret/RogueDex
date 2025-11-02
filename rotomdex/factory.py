@@ -4,6 +4,10 @@ rotomdex/factory.py
 Contains factory functions for creating Pokemon and Move objects from the
 raw data loaded by the data_loader. This decouples the data format
 from the class implementation.
+
+FIX: This version correctly reads the proper, capitalized 'name'
+field from the data dictionaries for items, moves, and Pokemon.
+This will fix the `StopIteration` error in the integration test.
 """
 
 from typing import Dict, List, Any
@@ -17,14 +21,15 @@ def create_item_from_data(item_name: str, item_data_map: Dict[str, ItemData]) ->
     """
     Creates an Item instance from its name and the global item data map.
     """
+    # Use .lower() to match API keys
     item_key = item_name.lower()
     if item_key not in item_data_map:
         return None
     
     data = item_data_map[item_key]
     
-    # FIX: Read the proper 'name' field from the data.
-    # This will set item.name to "Light Ball"
+    # Read the proper 'name' field from the data.
+    # Use the key as a fallback if 'name' doesn't exist.
     proper_name = data.get("name", item_key)
     
     return Item(
@@ -37,17 +42,21 @@ def create_move_from_data(move_name: str, move_data_map: Dict[str, MoveData]) ->
     """
     Creates a Move instance from its name and the global move data map.
     """
+    # Use .lower() to match the keys from the API importer
     move_key = move_name.lower()
+    
     if move_key not in move_data_map:
-        # Handle moves like "Growl" not being in the mock data
+        # Handle moves (like "Growl" in mock data) not being found
+        # This is a robust way to handle incomplete data sets.
         print(f"Warning: Move key '{move_key}' not found. Creating placeholder.")
+        # Return a placeholder with the capitalized name
         return Move(name=move_name.capitalize(), move_type="normal", category="status",
                     power=0, accuracy=100, pp=20, _priority=0)
 
     data = move_data_map[move_key]
     
     # FIX: Read the proper 'name' field from the data.
-    # This will set move.name to "Tackle"
+    # This will set move.name to "Tackle", not "tackle".
     proper_name = data.get("name", move_key)
     
     return Move(
@@ -75,7 +84,9 @@ def create_pokemon_from_data(
     """
     Creates a Pokemon instance from its species name and other parameters.
     """
+    # Use .lower() to match the keys from the API importer
     pokemon_key = species_name.lower()
+    
     if pokemon_key not in pokemon_data_map:
          raise KeyError(f"Pokemon key '{pokemon_key}' not found in pokemon_data_map.")
          
@@ -109,3 +120,5 @@ def create_pokemon_from_data(
         _tera_type= tera_type,
         _is_active=is_active,
     )
+
+

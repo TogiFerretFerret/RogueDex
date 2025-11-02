@@ -1,9 +1,7 @@
 {
   "light-ball": {
     "name": "Light Ball",
-    "id_name": "light-ball",
     "fling_power": 30,
     "effect": "Doubles Pikachu's Attack and Sp. Atk."
   }
 }
-

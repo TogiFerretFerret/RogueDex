@@ -1,119 +1,115 @@
 """
-battledex-engine/interfaces.py
+battledex_engine/interfaces.py
 
-Defines the abstract base classes (ABCs) that form the contract between
-the battle engine and a specific ruleset implementation (like rotomdex).
-
-FIX: Added 'SpecialAction' and new properties to 'Combatant'
-for items and Terastalization. We also now import Item from
-the correct 'battledex_engine' package.
+Defines the core abstract interfaces for the battledex engine:
+- Action: A move or other action a combatant can take.
+- Combatant: The entity that performs actions (e.g., a Pokemon).
+- Ruleset: The "brain" of the simulation, defining all game logic.
 """
 
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Callable, TYPE_CHECKING, Optional
+from abc import ABC, abstractmethod, abstractproperty
+from typing import List, Dict, Any, Callable, Optional
+from dataclasses import dataclass
 
-# Use a forward reference for type hints to avoid circular imports.
-if TYPE_CHECKING:
-    from .state import BattleState
-    from .event_queue import EventQueue, Event
+# We'll import these later, but define the types here for hinting
+class BattleState: pass
+class EventQueue: pass
+class Event: pass
+class Item: pass
+
+
+@dataclass
+class Action(ABC):
+    """
+    Abstract Base Class for any action a combatant can perform.
+    e.g., a Move, using an Item, switching out.
+    """
     
-# Import the generalized Item class from its new location
-from .item import Item
+    @property
+    @abstractmethod
+    def priority(self) -> int:
+        """
+        The priority of the action. Higher values go first.
+        (e.g., Quick Attack = 1, regular moves = 0, switching = 6)
+        """
+        pass
 
+
+@dataclass
+class SpecialAction(Action):
+    """A simple, concrete implementation for special battle actions."""
+    kind: str  # e.g., "switch", "terastalize"
+    _priority: int = 0
+    
+    @property
+    def priority(self) -> int:
+        return self._priority
+
+
+@dataclass
 class Combatant(ABC):
     """
-    An interface representing a participant in a battle.
+    Abstract Base Class for a combatant.
+    e.g., a Pokemon, a Final Fantasy character, etc.
     """
+
     @property
     @abstractmethod
     def id(self) -> str:
-        """A unique identifier for this combatant within the battle."""
+        """A unique instance ID for this combatant."""
         pass
 
     @property
     @abstractmethod
     def is_active(self) -> bool:
-        """Is this combatant currently the active one on its team?"""
+        """Whether this combatant is currently active in battle."""
         pass
         
-    # --- NEW PROPERTIES FOR ITEMS ---
+    # --- New Properties for Tera/Items ---
+
     @property
     @abstractmethod
     def held_item(self) -> Optional[Item]:
-        """The item this combatant is currently holding."""
-        pass
-
-    # --- NEW PROPERTIES FOR TERASTALLIZATION ---
-    @property
-    @abstractmethod
-    def tera_type(self) -> str:
-        """The Terastal type of this Pokémon."""
-        pass
-        
-    @property
-    @abstractmethod
-    def has_terastallized(self) -> bool:
-        """True if this Pokémon has already Terastallized."""
+        """The item this combatant is holding."""
         pass
         
     @property
     @abstractmethod
     def current_types(self) -> List[str]:
-        """The current in-battle types (can be changed by Tera)."""
+        """The combatant's current types (can be changed by effects)."""
         pass
-
-class Action(ABC):
-    """
-    An interface representing a choice made by a combatant for a turn.
-    """
+        
     @property
     @abstractmethod
-    def priority(self) -> int:
-        """
-        The priority of the action, used for turn ordering.
-        """
+    def tera_type(self) -> str:
+        """The combatant's Terastal type."""
+        pass
+        
+    @property
+    @abstractmethod
+    def has_terastallized(self) -> bool:
+        """Whether the combatant has already Terastallized."""
         pass
 
-# --- NEW ACTION TYPE FOR SPECIAL MECHANICS ---
-class SpecialAction(Action):
-    """
-    An action that represents a special mechanic, like
-    Terastallizing, Mega Evolving, etc.
-    """
-    def __init__(self, kind: str, priority: int = 100):
-        """
-        Args:
-            kind (str): The type of special action, e.g., "terastalize"
-            priority (int): Special actions usually have very high
-                            priority to ensure they happen first.
-        """
-        self._kind = kind
-        self._priority = priority
-        
-    @property
-    def kind(self) -> str:
-        return self._kind
-        
-    @property
-    def priority(self) -> int:
-        return self._priority
-        
 
 class Ruleset(ABC):
     """
-    An interface for a collection of game mechanics and event handlers.
+    Abstract Base Class for a game's ruleset.
+    This is the "brain" that contains all game-specific logic.
     """
+    
     @abstractmethod
-    def get_event_handlers(self) -> Dict[str, List[Callable[['Event', 'BattleState', 'EventQueue'], None]]]:
+    def get_event_handlers(self) -> Dict[str, List[Callable[[Event, BattleState, EventQueue], None]]]:
         """
-        Returns a dictionary mapping event types to a list of handler functions.
+        Returns a dictionary mapping event types (e.g., "DAMAGE")
+        to a list of functions that should handle that event.
         """
         pass
 
-    # NEW: Added a property to access the combatant map
+    # FIX: Add an abstract property for the combatant map.
+    # This is necessary for the engine to find combatants by ID.
     @property
     @abstractmethod
     def combatant_map(self) -> Dict[str, Combatant]:
-        """A map of combatant IDs to their objects."""
+        """A dictionary mapping combatant IDs to their objects."""
         pass
-

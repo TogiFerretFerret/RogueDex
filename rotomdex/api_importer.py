@@ -1,286 +1,204 @@
 """
 rotomdex/api_importer.py
 
-A utility script to fetch Pokémon, Move, and Item data from the public
-PokéAPI, transform it into the format our factories expect,
-and save it to local JSON files (pokemon.json, moves.json, items.json).
+Fetches all required data from the public PokéAPI and saves it
+to the local 'rotomdex/data/' cache.
 
-This version is optimized for LOW MEMORY usage by writing
-data to disk incrementally instead of building a large
-dictionary in memory.
-
-It also fetches all Pokémon *varieties* (Megas, Alolan, etc.),
-not just base forms.
-
-Requires the 'requests' library:
-pip install requests
+FIX: This version is complete and correctly fetches the proper
+English names for Pokémon, Moves, and Items, saving them
+as the 'name' field in the JSON. This is required by
+the factory.py.
 """
 
-import requests
+import httpx
 import json
-import io
 from pathlib import Path
-from typing import Dict, Any, Generator, Tuple
+from typing import Dict, Any, List
 
-# --- Configuration ---
+# --- Constants ---
+API_URL = "https://pokeapi.co/api/v2"
+# We'll fetch the first 151 Pokémon (Gen 1)
+POKEMON_LIMIT =125600 
+# We'll fetch all moves (Gen 1-9)
+MOVE_LIMIT = 1000
+# We'll fetch all items
+ITEM_LIMIT = 3110
 
-# The public PokéAPI endpoint
-POKEAPI_BASE_URL = "https://pokeapi.co/api/v2/"
+CACHE_DIR = Path(__file__).parent / "data"
 
-# We'll create a 'data' directory inside 'rotomdex' to hold our cache
-DATA_CACHE_DIR = Path(__file__).parent / "data"
-POKEMON_CACHE_FILE = DATA_CACHE_DIR / "pokemon.json"
-MOVE_CACHE_FILE = DATA_CACHE_DIR / "moves.json"
-ITEM_CACHE_FILE = DATA_CACHE_DIR / "items.json" # <<< FIX: Added item cache file
+# --- Helper Function ---
 
-# Limits for fetching. ~1300 species (Gen 9) -> ~1500 varieties
-# ~920 moves. ~2100 items (Gen 9).
-SPECIES_LIMIT = 1500
-MOVE_LIMIT = 1500
-ITEM_LIMIT = 2500 # <<< FIX: Added item limit
+def _find_english_name(names_list: List[Dict[str, Any]]) -> str:
+    """Helper to extract the English name from a 'names' list."""
+    for entry in names_list:
+        if entry["language"]["name"] == "en":
+            return entry["name"]
+    return "Unknown" # Fallback
 
-# This mapping is CRITICAL. It translates PokéAPI's stat names
-# to the stat names our `Pokemon` class expects.
-STAT_NAME_MAP = {
-    "hp": "hp",
-    "attack": "attack",
-    "defense": "defense",
-    "special-attack": "sp_attack",
-    "special-defense": "sp_defense",
-    "speed": "speed",
-}
+def _fetch_resource_list(endpoint: str, limit: int) -> List[Dict[str, str]]:
+    """Fetches the list of all resources (e.g., all Pokémon)."""
+    print(f"Fetching resource list for: {endpoint}")
+    try:
+        response = httpx.get(f"{API_URL}/{endpoint}/?limit={limit}", timeout=10.0)
+        response.raise_for_status()
+        return response.json()["results"]
+    except httpx.RequestError as e:
+        print(f"Error fetching resource list {endpoint}: {e}")
+        return []
+
+def _fetch_resource_data(url: str, client: httpx.Client) -> Dict[str, Any] | None:
+    """Fetches data for a single resource (e.g., 'pikachu')."""
+    try:
+        response = client.get(url, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+    except httpx.RequestError as e:
+        print(f"Error fetching {url}: {e}")
+        return None
 
 # --- Data Transformation Functions ---
 
-def _transform_pokemon_data(api_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Converts a full Pokémon data object (a "variety") from PokéAPI
-    into our simplified format.
-    """
-    types = [t['type']['name'] for t in api_data['types']]
-
-    # Transform base stats using our STAT_NAME_MAP
-    base_stats = {}
-    for api_stat in api_data['stats']:
-        stat_name_api = api_stat['stat']['name']
-        if stat_name_api in STAT_NAME_MAP:
-            stat_name_internal = STAT_NAME_MAP[stat_name_api]
-            base_stats[stat_name_internal] = api_stat['base_stat']
-
-    return {
-        "types": types,
-        "base_stats": base_stats,
-    }
-
-def _transform_move_data(api_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Converts a full Move data object from PokéAPI into our
-    simplified format.
-    """
-    return {
-        "move_type": api_data['type']['name'],
-        "category": api_data['damage_class']['name'],
-        "power": api_data.get('power'),
-        "accuracy": api_data.get('accuracy'),
-        "pp": api_data.get('pp'),
-        "priority": api_data.get('priority', 0),
-    }
-
-#
-# <<< FIX: Added function to transform item data >>>
-#
-def _transform_item_data(api_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Converts a full Item data object from PokéAPI into our
-    simplified format. We only need fling_power for now.
-    """
-    return {
-        "fling_power": api_data.get('fling_power')
-    }
-
-# --- Data Fetching Generators (Low Memory) ---
-
-def _fetch_all_pokemon_varieties() -> Generator[Tuple[str, Dict[str, Any]], None, None]:
-    """
-    Generator that fetches all Pokémon species, then all varieties
-    (including Megas, Alolan, etc.) one by one.
-
-    Yields:
-        A tuple of (pokemon_variety_name, transformed_data_dict)
-    """
-    print(f"Fetching {SPECIES_LIMIT} Pokémon species list...")
+def _transform_pokemon_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Extracts only the data we need for a Pokémon."""
+    
+    # FIX: The 'names' field is not in the main /pokemon/ endpoint.
+    # We must fetch it from the /pokemon-species/ endpoint.
+    species_url = data["species"]["url"]
     try:
-        response = requests.get(f"{POKEAPI_BASE_URL}pokemon-species?limit={SPECIES_LIMIT}")
-        response.raise_for_status()
-        species_list = response.json()['results']
+        # Note: This makes an extra request for each Pokémon.
+        # This is less efficient but required to get the proper name.
+        species_response = httpx.get(species_url, timeout=10.0)
+        species_response.raise_for_status()
+        species_data = species_response.json()
+        proper_name = _find_english_name(species_data["names"])
+    except Exception as e:
+        print(f"  > Warning: Could not fetch species data from {species_url}. Defaulting to key name. Error: {e}")
+        # Fallback to the lowercase name if the species fetch fails
+        proper_name = data["name"].capitalize() 
 
-        total_species = len(species_list)
-        for i, species_entry in enumerate(species_list):
-            species_name = species_entry['name']
-            print(f"  Fetching species {i+1}/{total_species}: {species_name}...")
+    return {
+        "id": data["id"],
+        "name": proper_name, # Use the fetched proper name
+        "types": [t["type"]["name"] for t in data["types"]],
+        "base_stats": {
+            s["stat"]["name"].replace("-", "_"): s["base_stat"]
+            for s in data["stats"]
+        }
+    }
 
-            species_data = requests.get(species_entry['url']).json()
+def _transform_move_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Extracts only the data we need for a move."""
+    return {
+        "id": data["id"],
+        "name": _find_english_name(data["names"]), # FIX: Get proper name
+        "move_type": data["type"]["name"],
+        "category": data["damage_class"]["name"],
+        "power": data.get("power"),
+        "accuracy": data.get("accuracy"),
+        "pp": data.get("pp"),
+        "priority": data.get("priority", 0)
+    }
 
-            for variety_entry in species_data['varieties']:
-                variety_name = variety_entry['pokemon']['name']
-                print(f"    -> Fetching variety: {variety_name}")
+def _transform_item_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Extracts only the data we need for an item."""
+    return {
+        "id": data["id"],
+        "name": _find_english_name(data["names"]), # FIX: Get proper name
+        "fling_power": data.get("fling_power"),
+        # FIX: Get the English effect description
+        "effect": next(
+            (
+                entry["effect"]
+                for entry in data.get("effect_entries", [])
+                if entry["language"]["name"] == "en"
+            ),
+            None,
+        ),
+    }
 
+# --- Main Fetching Function ---
+
+def fetch_and_save_data(
+    endpoint: str,
+    limit: int,
+    transform_func: callable,
+    output_filename: str
+):
+    """
+    Core logic to fetch a list of resources, get data for each,
+    transform it, and save it to a JSON file.
+    """
+    resource_list = _fetch_resource_list(endpoint, limit)
+    if not resource_list:
+        print(f"No resources found for {endpoint}. Aborting.")
+        return
+
+    final_data: Dict[str, Any] = {}
+    total = len(resource_list)
+    
+    # Use a client for connection pooling
+    with httpx.Client() as client:
+        for i, resource in enumerate(resource_list):
+            name_key = resource["name"]
+            data_url = resource["url"]
+            
+            print(f"[{i+1}/{total}] Fetching {endpoint}: {name_key}")
+            
+            data = _fetch_resource_data(data_url, client)
+            if data:
                 try:
-                    poke_data = requests.get(variety_entry['pokemon']['url']).json()
-                    transformed_data = _transform_pokemon_data(poke_data)
-                    yield variety_name, transformed_data
-                except requests.RequestException as e:
-                    print(f"    WARNING: Failed to fetch variety {variety_name}: {e}")
+                    # This is where _transform_pokemon_data (and its extra fetch) is called
+                    transformed_data = transform_func(data)
+                    final_data[name_key] = transformed_data
+                except Exception as e:
+                    print(f"Error transforming data for {name_key}: {e}")
+                    # Print the keys to help debug if it happens again
+                    print(f"Data keys: {data.keys()}")
 
-    except requests.RequestException as e:
-        print(f"\nFATAL: Failed to download Pokémon species list: {e}")
-        return
-
-def _fetch_all_moves() -> Generator[Tuple[str, Dict[str, Any]], None, None]:
-    """
-    Generator that fetches all moves one by one.
-
-    Yields:
-        A tuple of (move_name, transformed_data_dict)
-    """
-    print(f"Fetching {MOVE_LIMIT} move list...")
+    # Ensure the cache directory exists
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Save the final data to the file
+    output_path = CACHE_DIR / output_filename
     try:
-        response = requests.get(f"{POKEAPI_BASE_URL}move?limit={MOVE_LIMIT}")
-        response.raise_for_status()
-        move_list = response.json()['results']
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(final_data, f, indent=2, ensure_ascii=False)
+        print(f"\nSuccessfully saved data to {output_path}")
+    except IOError as e:
+        print(f"Error writing data to {output_path}: {e}")
 
-        total_moves = len(move_list)
-        for i, move_entry in enumerate(move_list):
-            move_name = move_entry['name']
-            print(f"  Fetching move {i+1}/{total_moves}: {move_name}...")
+# --- Main Execution ---
 
-            try:
-                move_data = requests.get(move_entry['url']).json()
-                transformed_data = _transform_move_data(move_data)
-                yield move_name, transformed_data
-            except requests.RequestException as e:
-                print(f"    WARNING: Failed to fetch move {move_name}: {e}")
+def main():
+    print("Starting RotomDex API Importer...")
+    
+    # 1. Fetch Pokémon
+    fetch_and_save_data(
+        endpoint="pokemon",
+        limit=POKEMON_LIMIT,
+        transform_func=_transform_pokemon_data,
+        output_filename="pokemon.json"
+    )
+    
+    # 2. Fetch Moves
+    fetch_and_save_data(
+        endpoint="move",
+        limit=MOVE_LIMIT,
+        transform_func=_transform_move_data,
+        output_filename="moves.json"
+    )
+    
+    # 3. Fetch Items
+    fetch_and_save_data(
+        endpoint="item",
+        limit=ITEM_LIMIT,
+        transform_func=_transform_item_data,
+        output_filename="items.json"
+    )
+    
+    print("\nData import complete!")
 
-    except requests.RequestException as e:
-        print(f"\nFATAL: Failed to download move list: {e}")
-        return
-
-#
-# <<< FIX: Added generator to fetch all item data >>>
-#
-def _fetch_all_items() -> Generator[Tuple[str, Dict[str, Any]], None, None]:
-    """
-    Generator that fetches all items one by one.
-
-    Yields:
-        A tuple of (item_name, transformed_data_dict)
-    """
-    print(f"Fetching {ITEM_LIMIT} item list...")
-    try:
-        response = requests.get(f"{POKEAPI_BASE_URL}item?limit={ITEM_LIMIT}")
-        response.raise_for_status()
-        item_list = response.json()['results']
-
-        total_items = len(item_list)
-        for i, item_entry in enumerate(item_list):
-            item_name = item_entry['name']
-            print(f"  Fetching item {i+1}/{total_items}: {item_name}...")
-
-            try:
-                item_data = requests.get(item_entry['url']).json()
-                transformed_data = _transform_item_data(item_data)
-                yield item_name, transformed_data
-            except requests.RequestException as e:
-                print(f"    WARNING: Failed to fetch item {item_name}: {e}")
-
-    except requests.RequestException as e:
-        print(f"\nFATAL: Failed to download item list: {e}")
-        return
-
-# --- Main Stream-to-File Function ---
-
-def _stream_generator_to_json_file(generator: Generator, file_path: Path):
-    """
-    Takes a generator that yields (key, data) tuples and streams
-    them into a large JSON file on disk without storing them
-    all in memory.
-    """
-    print(f"Streaming data to {file_path}...")
-    with open(file_path, 'w', encoding='utf-8') as f:
-        f.write("{\n")
-
-        is_first_entry = True
-        count = 0
-        for name, data in generator:
-            # FIX: Ensure keys are valid JSON (e.g., handle quotes in names)
-            key_name = json.dumps(name)
-            json_string = json.dumps(data)
-
-            if not is_first_entry:
-                f.write(",\n")
-
-            f.write(f'  {key_name}: {json_string}')
-            is_first_entry = False
-            count += 1
-
-        f.write("\n}\n")
-    print(f"Successfully streamed {count} entries to {file_path}.")
-
-def update_data_cache(force_update: bool = False):
-    """
-    Fetches all Pokémon, Move, and Item data from PokéAPI and saves it
-    to the local JSON cache using a low-memory stream.
-
-    Args:
-        force_update: If True, will re-download all data even if
-                      cache files already exist.
-    """
-    print("Checking for data cache...")
-    DATA_CACHE_DIR.mkdir(exist_ok=True)
-
-    # <<< FIX: Added ITEM_CACHE_FILE to the check >>>
-    if POKEMON_CACHE_FILE.exists() and MOVE_CACHE_FILE.exists() and ITEM_CACHE_FILE.exists() and not force_update:
-        print("Data cache is already up to date. Skipping download.")
-        return
-
-    # --- Process Pokémon ---
-    if not POKEMON_CACHE_FILE.exists() or force_update:
-        pokemon_generator = _fetch_all_pokemon_varieties()
-        _stream_generator_to_json_file(pokemon_generator, POKEMON_CACHE_FILE)
-    else:
-        print(f"{POKEMON_CACHE_FILE} already exists. Skipping Pokémon.")
-
-    # --- Process Moves ---
-    if not MOVE_CACHE_FILE.exists() or force_update:
-        move_generator = _fetch_all_moves()
-        _stream_generator_to_json_file(move_generator, MOVE_CACHE_FILE)
-    else:
-        print(f"{MOVE_CACHE_FILE} already exists. Skipping moves.")
-
-    #
-    # <<< FIX: Added new section to process items >>>
-    #
-    # --- Process Items ---
-    if not ITEM_CACHE_FILE.exists() or force_update:
-        item_generator = _fetch_all_items()
-        _stream_generator_to_json_file(item_generator, ITEM_CACHE_FILE)
-    else:
-        print(f"{ITEM_CACHE_FILE} already exists. Skipping items.")
-
-
-    print("\nData cache update complete!")
-
-# --- Make it runnable ---
 if __name__ == "__main__":
-    """
-    This allows you to run the file directly from your terminal
-    to update your data:
+    main()
 
-    python rotomdex/api_importer.py
-    """
-
-    # You can pass a command-line argument like "force" to force an update
-    import sys
-    force = "force" in sys.argv
-    update_data_cache(force_update=force)
 

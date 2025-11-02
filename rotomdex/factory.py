@@ -31,6 +31,7 @@ def create_item_from_data(item_name: str, item_data_map: Dict[str, ItemData]) ->
     # Read the proper 'name' field from the data.
     # Use the key as a fallback if 'name' doesn't exist.
     proper_name = data.get("name", item_key)
+    print("STDERR:",proper_name)
     
     return Item(
         id_name=item_key,

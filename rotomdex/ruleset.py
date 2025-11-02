@@ -5,8 +5,8 @@ This is the concrete implementation of the Ruleset interface.
 This is the "brain" that plugs into the battledex-engine and
 defines all Pokémon-specific game logic.
 
-FIX: This version correctly reads the `user_id` from the
-event payload to determine who is attacking.
+FIX: This version correctly implements the `combatant_map`
+abstract property from the Ruleset interface.
 """
 
 from typing import Dict, List, Any, Callable
@@ -25,11 +25,16 @@ class PokemonRuleset(Ruleset):
         """
         Args:
             combatant_map: A "master list" mapping a Combatant's
-                           ID to its full object. This is necessary
-                           so our handlers can retrieve the full
-                           Pokemon object from just an ID.
+                           ID to its full object.
         """
-        self.combatant_map = combatant_map
+        # Store the map in a private variable
+        self._combatant_map = combatant_map
+
+    # FIX: Implement the abstract property from the interface
+    @property
+    def combatant_map(self) -> Dict[str, Combatant]:
+        """A dictionary mapping combatant IDs to their objects."""
+        return self._combatant_map
 
     def get_event_handlers(self) -> Dict[str, List[Callable[[Event, BattleState, EventQueue], None]]]:
         """
@@ -62,48 +67,38 @@ class PokemonRuleset(Ruleset):
         This is where we determine what the action *does*.
         """
         action = event.payload.get("action")
-        user_id = event.payload.get("user_id") # FIX: Get user_id from payload
-        
+        user_id = event.payload.get("user_id")
+
         if not isinstance(action, Move) or not user_id:
             return
 
         move: Move = action
-        
+
         # Find the user and target
-        user = self.combatant_map.get(user_id)
+        user = self._combatant_map.get(user_id)
         target_id = self._find_target_id(user_id, state)
-        target = self.combatant_map.get(target_id)
-        
+        target = self._combatant_map.get(target_id)
+
         if not user or not target:
             print(f"Ruleset Error: Could not find user {user_id} or target {target_id}")
             return
-            
+
         print(f"Ruleset: {user.species_name} used {move.name} on {target.species_name}!")
-        
+
         # --- Basic Damage Calculation ---
-
-        # Get the attacker's relevant offensive stat
-        # (This is simplified, a real calc would check move.category)
-        offensive_stat = user.stats.get("attack", 0)
-
-        # --- NEW: Check for Item Effects ---
-        if user.held_item:
-            if user.held_item.name == "light-ball" and user.species_name == "pikachu":
-                print(f"Ruleset: {user.species_name}'s Light Ball flares up!")
-                offensive_stat *= 2  # Apply the modifier ON-THE-FLY
-
-            # You would add more item checks here
-            # elif user.held_item.name == "choice-band":
-            #    offensive_stat = int(offensive_stat * 1.5)
-
-        # ---
-
-
         damage = 10 # A placeholder
-        if move.power:
-            # Use the MODIFIED stat in your formula
+        if move.power and isinstance(user, Pokemon):
+            # A very simple, non-Poké formula for testing
+            
+            # --- This is where item logic would go ---
+            offensive_stat = user.stats.get("attack", 0)
+            if user.held_item and user.held_item.id_name == "light-ball" and user.species_name == "Pikachu":
+                 print("Ruleset: Pikachu's Light Ball flared!")
+                 offensive_stat *= 2
+            # ---
+            
             damage = move.power + offensive_stat // 5
-        
+
         # Create a new "DAMAGE" event
         damage_event = Event(
             event_type="DAMAGE",
@@ -121,14 +116,14 @@ class PokemonRuleset(Ruleset):
         """
         target_id = event.payload.get("target_id")
         damage = event.payload.get("damage", 0)
-        
-        target = self.combatant_map.get(target_id)
-        if not target:
+
+        target = self._combatant_map.get(target_id)
+        if not target or not isinstance(target, Pokemon):
             return
-            
+
         target.current_hp -= damage
         print(f"Ruleset: {target.species_name} took {damage} damage! Remaining HP: {target.current_hp}")
-        
+
         if target.current_hp <= 0:
             target.current_hp = 0
             # Create a "FAINT" event
@@ -143,12 +138,10 @@ class PokemonRuleset(Ruleset):
         Handles a Pokémon fainting.
         """
         target_id = event.payload.get("target_id")
-        target = self.combatant_map.get(target_id)
+        target = self._combatant_map.get(target_id)
         if not target:
             return
-        
+
         print(f"Ruleset: {target.species_name} fainted!")
         # In a real game, you would add events here to
         # check for a winner or force the player to switch.
-
-

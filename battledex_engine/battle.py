@@ -52,31 +52,44 @@ class Battle:
 
         return BattleState(teams=team_states)
 
-    def submit_actions(self, actions_map: Dict[str, Action]):
+    def submit_actions(self, actions_map: Dict[str, List[Action]]):
         """
         Players submit their chosen actions for the turn through this method.
         
         Args:
-            actions_map: A dictionary mapping combatant_id to their
-                         chosen Action object.
+            actions_map: A dictionary mapping combatant_id to a *list*
+                         of their chosen Action objects.
         """
-        # Create a list of (user_id, action) tuples
+        # Create a list of (user_id, action_list) tuples
         action_pairs = []
-        for user_id, action in actions_map.items():
+        for user_id, action_list in actions_map.items():
             # In a real game, you'd verify that user_id is allowed
             # to make a move this turn.
-            action_pairs.append((user_id, action))
+            action_pairs.append((user_id, action_list))
 
         # Sort actions by their priority value, highest first.
-        sorted_pairs = sorted(action_pairs, key=lambda pair: pair[1].priority, reverse=True)
+        #
+        # FIX: The lambda function must access the first action *in the list*
+        # (pair[1][0]) to get its priority, since pair[1] is a list.
+        #
+        # BEFORE:
+        # sorted_pairs = sorted(action_pairs, key=lambda pair: pair[1].priority, reverse=True)
+        #
+        # AFTER:
+        sorted_pairs = sorted(action_pairs, key=lambda pair: pair[1][0].priority, reverse=True)
+        #
         # In Pokémon, you would have a secondary sort here by speed,
         # which would be handled by the ruleset.
         # For now, priority-only is fine.
 
-        for user_id, action in sorted_pairs:
+        for user_id, action_list in sorted_pairs:
             # Create a generic event for each action. The ruleset's event handlers
             # will be responsible for interpreting this and creating more specific
             # events (like DAMAGE, STATUS_APPLIED, etc.).
+            
+            # We assume one action per user for now
+            action = action_list[0]
+            
             initial_event = Event(
                 event_type="ACTION_REQUEST",
                 payload={
@@ -98,5 +111,6 @@ class Battle:
         log = self._event_queue.process_all(self.state)
         self.state.turn_number += 1
         return log
+
 
 

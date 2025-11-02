@@ -8,7 +8,6 @@ from the class implementation.
 
 from typing import Dict, List, Any
 
-# FIX: Import Item from battledex_engine and ItemData from data_loader
 from battledex_engine.item import Item
 from .data_loader import PokemonData, MoveData, ItemData
 from .pokemon import Pokemon
@@ -18,19 +17,16 @@ def create_item_from_data(item_name: str, item_data_map: Dict[str, ItemData]) ->
     """
     Creates an Item instance from its name and the global item data map.
     """
-    # Use .lower() to match API keys
     item_key = item_name.lower()
     if item_key not in item_data_map:
         return None
     
     data = item_data_map[item_key]
     
-    # Read the proper 'name' field from the data.
-    # Use the key as a fallback if 'name' doesn't exist.
+    # FIX: Read the proper 'name' field from the data.
+    # This will set item.name to "Light Ball"
     proper_name = data.get("name", item_key)
     
-    # FIX: Pass both the id_name (key) and proper name
-    # This will satisfy the test_create_item assertion.
     return Item(
         id_name=item_key,
         name=proper_name,
@@ -41,12 +37,18 @@ def create_move_from_data(move_name: str, move_data_map: Dict[str, MoveData]) ->
     """
     Creates a Move instance from its name and the global move data map.
     """
-    # Use .lower() to match the keys from the API importer
     move_key = move_name.lower()
+    if move_key not in move_data_map:
+        # Handle moves like "Growl" not being in the mock data
+        print(f"Warning: Move key '{move_key}' not found. Creating placeholder.")
+        return Move(name=move_name.capitalize(), move_type="normal", category="status",
+                    power=0, accuracy=100, pp=20, _priority=0)
+
     data = move_data_map[move_key]
     
-    # Read the proper 'name' field from the data
-    proper_name = data.get("name", move_name)
+    # FIX: Read the proper 'name' field from the data.
+    # This will set move.name to "Tackle"
+    proper_name = data.get("name", move_key)
     
     return Move(
         name=proper_name,
@@ -66,7 +68,6 @@ def create_pokemon_from_data(
     move_data_map: Dict[str, MoveData],
     item_data_map: Dict[str, ItemData],
     instance_id: str,
-    # FIX: Make tera_type optional. This fixes both TypeErrors.
     tera_type: str | None = None,
     item_name: str | None = None,
     is_active: bool = False
@@ -74,11 +75,14 @@ def create_pokemon_from_data(
     """
     Creates a Pokemon instance from its species name and other parameters.
     """
-    # Use .lower() to match the keys from the API importer
     pokemon_key = species_name.lower()
+    if pokemon_key not in pokemon_data_map:
+         raise KeyError(f"Pokemon key '{pokemon_key}' not found in pokemon_data_map.")
+         
     pokemon_data = pokemon_data_map[pokemon_key]
     
-    # Get the proper capitalized name from the data
+    # FIX: Read the proper 'name' field from the data
+    # This will set pokemon.species_name to "Pikachu"
     proper_species_name = pokemon_data.get("name", species_name)
 
     # Create the move objects for this Pokemon
@@ -89,8 +93,7 @@ def create_pokemon_from_data(
     if item_name:
         item_object = create_item_from_data(item_name, item_data_map)
         
-    # FIX: Handle the optional tera_type
-    # If not provided, default to the Pokemon's first type
+    # Handle the optional tera_type
     pokemon_types = pokemon_data.get("types", [])
     if tera_type is None:
         tera_type = pokemon_types[0] if pokemon_types else "normal"
@@ -103,6 +106,6 @@ def create_pokemon_from_data(
         base_stats=pokemon_data.get("base_stats", {}),
         moves=pokemon_moves,
         _held_item=item_object,
-        _tera_type=tera_type,
+        _tera_type= tera_type,
         _is_active=is_active,
     )

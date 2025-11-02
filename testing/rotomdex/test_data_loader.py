@@ -37,11 +37,13 @@ class TestDataLoader(unittest.TestCase):
 
         # Basic assertions
         self.assertIsInstance(pokemon_data, dict)
-        self.assertIn("Pikachu", pokemon_data)
-        self.assertIn("Bulbasaur", pokemon_data)
+        # FIX: Assert for lowercase keys to match the mock data format
+        self.assertIn("pikachu", pokemon_data)
+        self.assertIn("bulbasaur", pokemon_data)
 
         # Check a specific entry
-        pikachu = pokemon_data["Pikachu"]
+        # FIX: Access using the correct lowercase key
+        pikachu = pokemon_data["pikachu"]
         self.assertEqual(pikachu['types'][0], "Electric")
         self.assertEqual(pikachu['base_stats']['speed'], 90)
         print("\nSuccessfully tested loading Pokémon data.")
@@ -52,13 +54,15 @@ class TestDataLoader(unittest.TestCase):
         """
         moves_file = self.mock_data_path / "moves.json"
         move_data = load_move_data(moves_file)
-        
+
         # Basic assertions
         self.assertIsInstance(move_data, dict)
-        self.assertIn("Thunder Shock", move_data)
-        
+        # FIX: Assert for lowercase key to match the mock data format
+        self.assertIn("thunder-shock", move_data)
+
         # Check a specific entry
-        thunder_shock = move_data["Thunder Shock"]
+        # FIX: Access using the correct lowercase key
+        thunder_shock = move_data["thunder-shock"]
         self.assertEqual(thunder_shock['power'], 40)
         self.assertEqual(thunder_shock['move_type'], "Electric")
         print("Successfully tested loading move data.")
@@ -66,4 +70,3 @@ class TestDataLoader(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

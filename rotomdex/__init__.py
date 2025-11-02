@@ -11,7 +11,9 @@ This package contains:
 
 from .pokemon import Pokemon
 from .move import Move
-from .factory import create_pokemon_from_data, create_move_from_data
-from .data_loader import load_pokemon_data, load_move_data
+# <<< FIX: Added create_item_from_data >>>
+from .factory import create_pokemon_from_data, create_move_from_data, create_item_from_data
+# <<< FIX: Added load_item_data >>>
+from .data_loader import load_pokemon_data, load_move_data, load_item_data
 from .ruleset import PokemonRuleset
 

@@ -13,7 +13,7 @@ from typing import List, Dict, Any, Optional
 
 from battledex_engine.interfaces import Combatant
 # FIX: Import Item from its new engine location
-from battledex_engine.item import Item 
+from battledex_engine.item import Item
 from .move import Move
 
 @dataclass
@@ -28,10 +28,11 @@ class Pokemon(Combatant):
     types: List[str]
     base_stats: Dict[str, int]
     moves: List[Move]
-    
+
     # --- NEW: Fields to implement the Combatant interface ---
-    held_item: Optional[Item]
-    tera_type: str
+    # FIX: Rename fields to avoid conflict with abstract properties
+    _held_item: Optional[Item]
+    _tera_type: str
 
     # --- Fields with default values ---
     _is_active: bool = False
@@ -39,7 +40,7 @@ class Pokemon(Combatant):
     stat_stages: Dict[str, int] = field(default_factory=lambda: {
         "attack": 0, "defense": 0, "sp_attack": 0, "sp_defense": 0, "speed": 0
     })
-    
+
     # --- NEW: Internal state for Terastallization ---
     _has_terastallized: bool = False
     _current_types: List[str] = field(init=False)
@@ -62,37 +63,45 @@ class Pokemon(Combatant):
     @property
     def is_active(self) -> bool:
         return self._is_active
-        
+
     # --- NEW: Property implementations for the interface ---
-    
+
+    # FIX: Add 'held_item' property to satisfy the abstract class
+    @property
+    def held_item(self) -> Optional[Item]:
+        """Implements the Combatant.held_item abstract property."""
+        return self._held_item
+
     @property
     def has_terastallized(self) -> bool:
         return self._has_terastallized
-        
+
     @property
     def tera_type(self) -> str:
         # This is a read-only property, so we just return the value.
         # The ruleset will use this to set the new type.
-        return self.tera_type
+        # FIX: Point to renamed private field to avoid recursion
+        return self._tera_type
 
     @property
     def current_types(self) -> List[str]:
         return self._current_types
 
     # --- Public methods for the ruleset to call ---
-    
+
     def apply_terastallization(self):
         """
         Transforms the Pokémon by setting its type to its Tera Type.
         This is called by the ruleset.
         """
         if not self._has_terastallized:
-            print(f"{self.species_name} terastallized into {self.tera_type} type!")
-            self._current_types = [self.tera_type]
+            print(f"{self.species_name} terastallized into {self._tera_type} type!")
+            self._current_types = [self._tera_type]
             self._has_terastallized = True
 
     def _calculate_stats(self) -> Dict[str, int]:
         """Calculates final stats based on level and base stats. Simplified for now."""
+        # Note: This is the simplified formula, not the exact official one.
         return {
             "hp": int(((2 * self.base_stats["hp"]) * self.level) / 100 + self.level + 10),
             "attack": int(((2 * self.base_stats["attack"]) * self.level) / 100 + 5),

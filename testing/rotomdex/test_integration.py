@@ -7,6 +7,9 @@ FIX: This version is now internally consistent.
 - It passes proper, capitalized names (e.g., "Pikachu", "Tackle")
   to the factory.
 - It asserts for those same proper, capitalized names.
+
+FIX: This version adds new unit tests for the Ruleset's
+_get_effectiveness method, driven by TDD.
 """
 import unittest
 import sys
@@ -22,7 +25,8 @@ from battledex_engine.battle import Battle
 from battledex_engine.interfaces import Combatant, SpecialAction
 from rotomdex.pokemon import Pokemon
 from rotomdex.move import Move
-from rotomdex.data_loader import load_pokemon_data, load_move_data, load_item_data
+# FIX: Import load_type_data
+from rotomdex.data_loader import load_pokemon_data, load_move_data, load_item_data, load_type_data
 from battledex_engine.item import Item
 from rotomdex.factory import create_pokemon_from_data
 from rotomdex.ruleset import PokemonRuleset
@@ -44,6 +48,10 @@ class TestBattleIntegration(unittest.TestCase):
 
         cls.pokemon_data = load_pokemon_data()
         cls.move_data = load_move_data()
+        
+        # FIX: Load the real type data
+        cls.type_data = load_type_data() 
+        
         try:
             cls.item_data = load_item_data()
         except FileNotFoundError:
@@ -51,41 +59,59 @@ class TestBattleIntegration(unittest.TestCase):
             cls.item_data = {} # Allow tests to run without items
             
         print("Game data loaded.")
+        
+        # --- Create a single ruleset instance for type testing ---
+        # This is a 'dummy' map just to satisfy the constructor.
+        # The type tests don't need real combatants.
+        dummy_map = {}
+        # FIX: Pass the loaded type data to the ruleset
+        # FIX: Removed type_data argument to match ruleset.__init__ signature
+        cls.ruleset_for_testing = PokemonRuleset(dummy_map)
 
     def setUp(self):
         """Create fresh Pokémon and battle for each test."""
 
         # --- Create Pokémon ---
         # We type hint as Combatant to test against the interface
-        self.pikachu: Combatant = create_pokemon_from_data(
-            # FIX: Use proper, capitalized names as input
-            species_name="Pikachu",
-            level=50,
-            move_names=["Tackle", "Growl"],
-            pokemon_data_map=self.pokemon_data,
-            move_data_map=self.move_data,
-            item_data_map=self.item_data,
-            instance_id="p1_pika",
-            item_name="light-ball",
-            is_active=True
-        )
+        try:
+            self.pikachu: Combatant = create_pokemon_from_data(
+                # FIX: Use proper, capitalized names as input
+                species_name="Pikachu",
+                level=50,
+                move_names=["Tackle", "Growl"],
+                pokemon_data_map=self.pokemon_data,
+                move_data_map=self.move_data,
+                item_data_map=self.item_data,
+                instance_id="p1_pika",
+                item_name="light-ball",
+                is_active=True
+            )
 
-        self.charmander: Combatant = create_pokemon_from_data(
-            # FIX: Use proper, capitalized names as input
-            species_name="Charmander",
-            level=50,
-            move_names=["Scratch", "Growl"],
-            pokemon_data_map=self.pokemon_data,
-            move_data_map=self.move_data,
-            item_data_map=self.item_data,
-            instance_id="p2_char",
-            is_active=True
-        )
+            self.charmander: Combatant = create_pokemon_from_data(
+                # FIX: Use proper, capitalized names as input
+                species_name="Charmander",
+                level=50,
+                move_names=["Scratch", "Growl"],
+                pokemon_data_map=self.pokemon_data,
+                move_data_map=self.move_data,
+                item_data_map=self.item_data,
+                instance_id="p2_char",
+                is_active=True
+            )
+        except KeyError as e:
+            print(f"\nCRITICAL ERROR in setUp: {e}")
+            print("This *usually* means your JSON data cache is stale.")
+            print("Run 'python rotomdex/api_importer.py' to fix it.")
+            # Skip all other tests if we can't even create the Pokémon
+            raise
 
         # --- Create Ruleset and Battle ---
         self.combatants_list = [self.pikachu, self.charmander]
         # The Ruleset constructor expects a DICT, not a list.
         self.combatant_map = {c.id: c for c in self.combatants_list}
+        
+        # FIX: Pass the loaded type data to the ruleset
+        # FIX: Removed type_data argument to match ruleset.__init__ signature
         self.ruleset = PokemonRuleset(self.combatant_map)
         
         self.battle = Battle(
@@ -141,6 +167,63 @@ class TestBattleIntegration(unittest.TestCase):
         print(f"  Pikachu HP: {pika.current_hp} / {pika_initial_hp}")
         print(f"  Charmander HP: {char.current_hp} / {char_initial_hp}")
         print("--- Test Complete ---")
+
+
+    # --- NEW: TDD Tests for Type Effectiveness ---
+    # These tests validate the logic in ruleset.py
+    
+    def test_effectiveness_super_effective(self):
+        """Tests 2x super effective damage (e.g., Electric > Water)."""
+        print("\n--- Running Test: test_effectiveness_super_effective ---")
+        # Test: Electric move vs. Water type
+        multiplier = self.ruleset_for_testing._get_effectiveness(
+            move_type="Electric",
+            target_types=["Water"]
+        )
+        self.assertEqual(multiplier, 2.0)
+
+    def test_effectiveness_not_very_effective(self):
+        """Tests 0.5x not very effective damage (e.g., Electric > Grass)."""
+        print("\n--- Running Test: test_effectiveness_not_very_effective ---")
+        # Test: Electric move vs. Grass type
+        multiplier = self.ruleset_for_testing._get_effectiveness(
+            move_type="Electric",
+            target_types=["Grass"]
+        )
+        self.assertEqual(multiplier, 0.5)
+
+    def test_effectiveness_immune(self):
+        """Tests 0x immune damage (e.g., Electric > Ground)."""
+        print("\n--- Running Test: test_effectiveness_immune ---")
+        # Test: Electric move vs. Ground type
+        multiplier = self.ruleset_for_testing._get_effectiveness(
+            move_type="Electric",
+            target_types=["Ground"]
+        )
+        self.assertEqual(multiplier, 0.0)
+
+    def test_effectiveness_dual_type_4x(self):
+        """Tests 4x effective damage (e.g., Electric > Water/Flying)."""
+        print("\n--- Running Test: test_effectiveness_dual_type_4x ---")
+        # Test: Electric move vs. Water/Flying type (like Gyarados)
+        multiplier = self.ruleset_for_testing._get_effectiveness(
+            move_type="Electric",
+            target_types=["Water", "Flying"]
+        )
+        self.assertEqual(multiplier, 4.0)
+
+    def test_effectiveness_dual_type_neutral(self):
+        """Tests neutral damage from mixed effectiveness (e.g., Electric > Water/Grass)."""
+        print("\n--- Running Test: test_effectiveness_dual_type_neutral ---")
+        # Test: Electric move vs. Water/Grass type (like Ludicolo)
+        # 2.0 (vs Water) * 0.5 (vs Grass) = 1.0
+        multiplier = self.ruleset_for_testing._get_effectiveness(
+            move_type="Electric",
+            target_types=["Water", "Grass"]
+        )
+        self.assertEqual(multiplier, 1.0)
+
+    # --- End of Type Effectiveness Tests ---
 
 
     @unittest.skip("Terastallization logic not yet implemented in ruleset")
@@ -222,5 +305,6 @@ class TestBattleIntegration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 
 

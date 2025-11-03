@@ -19,13 +19,13 @@ from typing import Dict, Any, List
 # --- Constants ---
 API_URL = "https://pokeapi.co/api/v2"
 # We'll fetch the first 151 Pokémon (Gen 1) for speed
-POKEMON_LIMIT = 151
+POKEMON_LIMIT = 125600
 # We'll fetch all moves (Gen 1-9)
-MOVE_LIMIT = 930
+MOVE_LIMIT = 12500
 # We'll fetch all items
-ITEM_LIMIT = 2110
+ITEM_LIMIT = 125000
 # We'll fetch all 18 types (+ "unknown" and "shadow")
-TYPE_LIMIT = 20
+TYPE_LIMIT = 12500
 
 CACHE_DIR = Path(__file__).parent / "data"
 

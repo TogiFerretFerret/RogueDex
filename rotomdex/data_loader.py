@@ -17,7 +17,9 @@ from typing import Dict, Any, List
 # --- Type Aliases for Clarity ---
 PokemonData = Dict[str, Any]
 MoveData = Dict[str, Any]
-ItemData = Dict[str, Any]  # <<< FIX: Added ItemData type alias
+ItemData = Dict[str, Any]
+# FIX: Add TypeData alias
+TypeData = Dict[str, float] 
 
 # --- Default cache directory ---
 DEFAULT_CACHE_DIR = Path(__file__).parent / "data"
@@ -63,9 +65,7 @@ def load_move_data(data_path: Path | None = None) -> Dict[str, MoveData]:
             print("python rotomdex/api_importer.py")
         raise e # Re-raise error to fail tests
 
-#
-# <<< FIX: Replaced stub with full implementation >>>
-#
+
 def load_item_data(data_path: Path | None = None) -> Dict[str, ItemData]:
     """
     Loads all item data from the 'data/items.json' cache.
@@ -87,5 +87,26 @@ def load_item_data(data_path: Path | None = None) -> Dict[str, ItemData]:
         # FIX: Re-raise the error so tests (like test_factory)
         # that depend on mock data will fail correctly.
         raise e
+
+# FIX: Add a new function to load the type chart
+def load_type_data(data_path: Path | None = None) -> Dict[str, TypeData]:
+    """
+    Loads all type relation data from the 'data/types.json' cache.
+
+    If data_path is provided, it will be used instead.
+    """
+    if data_path is None:
+        data_path = DEFAULT_CACHE_DIR / "types.json"
+
+    try:
+        with open(data_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error: Type data not found at {data_path}.")
+        if data_path == (DEFAULT_CACHE_DIR / "types.json"):
+            print("Please run the API importer script:")
+            print("python rotomdex/api_importer.py")
+        raise e # Re-raise error to fail tests
 
 

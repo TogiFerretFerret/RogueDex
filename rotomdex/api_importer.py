@@ -4,10 +4,11 @@ rotomdex/api_importer.py
 Fetches all required data from the public PokéAPI and saves it
 to the local 'rotomdex/data/' cache.
 
-FIX: This version is complete and correctly fetches the proper
-English names for Pokémon, Moves, and Items, saving them
-as the 'name' field in the JSON. This is required by
-the factory.py.
+This version fetches:
+1. Pokémon (Gen 1) - including their types, stats, and proper names.
+2. Moves (All) - including their type, category, power, and proper names.
+3. Items (All) - including their proper names and effects.
+4. Types (All) - including their full damage effectiveness chart.
 """
 
 import httpx
@@ -17,12 +18,14 @@ from typing import Dict, Any, List
 
 # --- Constants ---
 API_URL = "https://pokeapi.co/api/v2"
-# We'll fetch the first 151 Pokémon (Gen 1)
-POKEMON_LIMIT =125600 
+# We'll fetch the first 151 Pokémon (Gen 1) for speed
+POKEMON_LIMIT = 151
 # We'll fetch all moves (Gen 1-9)
-MOVE_LIMIT = 1000
+MOVE_LIMIT = 930
 # We'll fetch all items
-ITEM_LIMIT = 3110
+ITEM_LIMIT = 2110
+# We'll fetch all 18 types (+ "unknown" and "shadow")
+TYPE_LIMIT = 20
 
 CACHE_DIR = Path(__file__).parent / "data"
 
@@ -61,24 +64,22 @@ def _fetch_resource_data(url: str, client: httpx.Client) -> Dict[str, Any] | Non
 def _transform_pokemon_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """Extracts only the data we need for a Pokémon."""
     
-    # FIX: The 'names' field is not in the main /pokemon/ endpoint.
+    # The 'names' field is not in the main /pokemon/ endpoint.
     # We must fetch it from the /pokemon-species/ endpoint.
     species_url = data["species"]["url"]
     try:
-        # Note: This makes an extra request for each Pokémon.
-        # This is less efficient but required to get the proper name.
         species_response = httpx.get(species_url, timeout=10.0)
         species_response.raise_for_status()
         species_data = species_response.json()
         proper_name = _find_english_name(species_data["names"])
     except Exception as e:
         print(f"  > Warning: Could not fetch species data from {species_url}. Defaulting to key name. Error: {e}")
-        # Fallback to the lowercase name if the species fetch fails
         proper_name = data["name"].capitalize() 
 
     return {
         "id": data["id"],
-        "name": proper_name, # Use the fetched proper name
+        "name": proper_name, # The proper, capitalized name
+        # This is the "pokemon's types" you were asking for
         "types": [t["type"]["name"] for t in data["types"]],
         "base_stats": {
             s["stat"]["name"].replace("-", "_"): s["base_stat"]
@@ -90,7 +91,7 @@ def _transform_move_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """Extracts only the data we need for a move."""
     return {
         "id": data["id"],
-        "name": _find_english_name(data["names"]), # FIX: Get proper name
+        "name": _find_english_name(data["names"]),
         "move_type": data["type"]["name"],
         "category": data["damage_class"]["name"],
         "power": data.get("power"),
@@ -103,9 +104,8 @@ def _transform_item_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """Extracts only the data we need for an item."""
     return {
         "id": data["id"],
-        "name": _find_english_name(data["names"]), # FIX: Get proper name
+        "name": _find_english_name(data["names"]),
         "fling_power": data.get("fling_power"),
-        # FIX: Get the English effect description
         "effect": next(
             (
                 entry["effect"]
@@ -115,6 +115,41 @@ def _transform_item_data(data: Dict[str, Any]) -> Dict[str, Any]:
             None,
         ),
     }
+
+def _transform_type_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extracts the damage relations for a single type and formats it
+    into the offensive chart we need.
+    """
+    relations = data["damage_relations"]
+    offense_chart = {}
+
+    # This is the list of standard types in the matrix.
+    # We set them all to 1.0 (normal damage) first.
+    all_types = [
+        "normal", "fire", "water", "electric", "grass", "ice", "fighting",
+        "poison", "ground", "flying", "psychic", "bug", "rock", "ghost",
+        "dragon", "dark", "steel", "fairy"
+    ]
+    
+    for t in all_types:
+        offense_chart[t] = 1.0
+    
+    # Now, we apply the multipliers from the API
+    for t in relations["double_damage_to"]:
+        if t["name"] in offense_chart:
+            offense_chart[t["name"]] = 2.0
+            
+    for t in relations["half_damage_to"]:
+        if t["name"] in offense_chart:
+            offense_chart[t["name"]] = 0.5
+            
+    for t in relations["no_damage_to"]:
+        if t["name"] in offense_chart:
+            offense_chart[t["name"]] = 0.0
+
+    return offense_chart
+
 
 # --- Main Fetching Function ---
 
@@ -147,8 +182,8 @@ def fetch_and_save_data(
             data = _fetch_resource_data(data_url, client)
             if data:
                 try:
-                    # This is where _transform_pokemon_data (and its extra fetch) is called
                     transformed_data = transform_func(data)
+                    # Use the lowercase name as the key for the JSON
                     final_data[name_key] = transformed_data
                 except Exception as e:
                     print(f"Error transforming data for {name_key}: {e}")
@@ -194,6 +229,14 @@ def main():
         limit=ITEM_LIMIT,
         transform_func=_transform_item_data,
         output_filename="items.json"
+    )
+    
+    # 4. Fetch Types
+    fetch_and_save_data(
+        endpoint="type",
+        limit=TYPE_LIMIT,
+        transform_func=_transform_type_data,
+        output_filename="types.json"
     )
     
     print("\nData import complete!")

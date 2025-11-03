@@ -106,8 +106,8 @@ class Pokemon(Combatant):
             "hp": int(((2 * self.base_stats["hp"]) * self.level) / 100 + self.level + 10),
             "attack": int(((2 * self.base_stats["attack"]) * self.level) / 100 + 5),
             "defense": int(((2 * self.base_stats["defense"]) * self.level) / 100 + 5),
-            "sp_attack": int(((2 * self.base_stats["sp_attack"]) * self.level) / 100 + 5),
-            "sp_defense": int(((2 * self.base_stats["sp_defense"]) * self.level) / 100 + 5),
+            "sp_attack": int(((2 * self.base_stats["special_attack"]) * self.level) / 100 + 5),
+            "sp_defense": int(((2 * self.base_stats["special_defense"]) * self.level) / 100 + 5),
             "speed": int(((2 * self.base_stats["speed"]) * self.level) / 100 + 5),
         }
 

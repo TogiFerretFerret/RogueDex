@@ -7,8 +7,8 @@
       "hp": 45,
       "attack": 49,
       "defense": 49,
-      "sp_attack": 65,
-      "sp_defense": 65,
+      "special_attack": 65,
+      "special_defense": 65,
       "speed": 45
     }
   },
@@ -20,8 +20,8 @@
       "hp": 35,
       "attack": 55,
       "defense": 40,
-      "sp_attack": 50,
-      "sp_defense": 50,
+      "special_attack": 50,
+      "special_defense": 50,
       "speed": 90
     }
   }

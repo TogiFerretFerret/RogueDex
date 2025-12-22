@@ -107,10 +107,17 @@ def deserialize(data: bytes) -> dict:
     """
     Deserializes a byte string from our custom format into a Python dictionary.
     """
+    if not data:
+        raise ValueError("Cannot deserialize empty data.")
+        
     stream = io.BytesIO(data)
-    tag = stream.read(1)[0]
+    tag_byte = stream.read(1)
+    if not tag_byte:
+        raise ValueError("Data stream is empty.")
+    
+    tag = tag_byte[0]
     if tag != TAG_DICT:
-        raise ValueError("Data stream does not start with a dictionary tag.")
+        raise ValueError(f"Data stream does not start with a dictionary tag (got {tag}).")
     return _deserialize_dict_from_stream(stream)
 
 

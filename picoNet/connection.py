@@ -16,7 +16,10 @@ from .packet import Packet, PacketHeader, pack_packet, unpack_packet, PROTOCOL_I
 from .serializer import serialize, deserialize
 
 # --- Constants for the handshake protocol ---
-# ... (rest of constants)
+HANDSHAKE_CHALLENGE = b'\xDE\xAD\xBE\xEF'
+HANDSHAKE_RESPONSE = b'\xCA\xFE\xBA\xBE'
+HANDSHAKE_TIMEOUT = 5.0
+HANDSHAKE_RESEND_INTERVAL = 1.0
 
 class ConnectionState(Enum):
     """Represents the different states of the connection."""
@@ -113,6 +116,7 @@ class Connection:
         self._socket.send(self.remote_address, packed_data)
         self._sent_packets[self._sequence_number] = (time.time(), packed_data)
         self._sequence_number = (self._sequence_number + 1) % 65536
+
     def send_ack_only(self):
         """
         Sends an ACK-only packet without incrementing the sequence number.
@@ -125,7 +129,6 @@ class Connection:
             return  # Nothing to ACK yet
         
         # Create a packet with empty payload that only carries ACK information
-        # Use sequence number 0 and don't track this packet for retransmission
         header = PacketHeader(
             protocol_id=PROTOCOL_ID,
             sequence=0,  # Special sequence 0 for ACK-only packets
@@ -135,7 +138,6 @@ class Connection:
         packet = Packet(header=header, payload=b'')  # Empty payload
         packed_data = pack_packet(packet)
         self._socket.send(self.remote_address, packed_data)
-        # Don't add to _sent_packets - we don't need to track ACK-only packets
 
     def receive(self) -> List[Any]:
         """
@@ -181,38 +183,32 @@ class Connection:
             data, address = received
             
             # --- Handshake Packet Handling ---
-            # This logic is processed regardless of the current connection state,
-            # making the handshake robust and idempotent.
             if data == HANDSHAKE_CHALLENGE:
-                # A peer has initiated or re-sent a connection request.
                 print(f"Received handshake challenge from {address}. Sending response.")
                 if self.state == ConnectionState.DISCONNECTED:
-                    # This is a new connection from our perspective (acting as server).
                     self.remote_address = address
                     self.state = ConnectionState.CONNECTED
                     self.last_receive_time = time.time()
                     self._remote_sequence_number = -1
                     self._sequence_number = 0
                 self._socket.send(address, HANDSHAKE_RESPONSE)
-                continue # Handshake packet processed.
+                continue
 
             if data == HANDSHAKE_RESPONSE:
-                # We received a response to our challenge.
                 if self.state == ConnectionState.CONNECTING and address == self.remote_address:
                     print("Handshake successful. Connection established.")
                     self.state = ConnectionState.CONNECTED
                     self.last_receive_time = time.time()
-                continue # Handshake packet processed.
+                continue
 
             # --- Application Packet Handling ---
-            # If we are not fully connected, ignore any non-handshake packets.
             if self.state != ConnectionState.CONNECTED or address != self.remote_address:
                 continue
 
             try:
                 packet = unpack_packet(data)
                 
-                # --- FIX: Verify Protocol ID ---
+                # Verify Protocol ID
                 if packet.header.protocol_id != PROTOCOL_ID:
                     continue
 
@@ -227,49 +223,39 @@ class Connection:
         seq = packet.header.sequence
         self._process_acks(packet.header.ack, packet.header.ack_bitfield)
 
-        # Ignore ACK-only packets (sequence 0 with empty payload)
+        # Ignore ACK-only packets
         if seq == 0 and len(packet.payload) == 0:
-            return  # This is just an ACK, don't process as data
+            return
         
         if seq in self._received_sequences:
             return
         
         self._received_sequences.append(seq)
-        if packet.payload:  # Only deserialize if there's actual data
+        if packet.payload:
             self._received_payloads.append(deserialize(packet.payload))
 
         if self._remote_sequence_number == -1 or is_sequence_greater(seq, self._remote_sequence_number):
             if self._remote_sequence_number != -1:
-                # --- FIX: Account for sequence wrapping in diff calculation ---
                 diff = (seq - self._remote_sequence_number) % 65536
                 if diff <= 16:
-                    # A new latest packet has arrived. Shift the existing bitfield
-                    # to match the new sequence number and mark the bit for the
-                    # *previous* latest sequence number as received.
                     self._ack_bitfield = (self._ack_bitfield << diff) | (1 << (diff - 1))
-                    # Mask to 16 bits to prevent overflow
                     self._ack_bitfield &= 0xFFFF
                 else:
-                    # The gap is too large; the old bitfield is irrelevant.
                     self._ack_bitfield = 0
             self._remote_sequence_number = seq
         else:
-            # An older packet arrived out of order. Mark its bit.
-            # --- FIX: Account for sequence wrapping in diff calculation ---
             diff = (self._remote_sequence_number - seq) % 65536
             if diff <= 16:
                 self._ack_bitfield |= (1 << (diff - 1))
-                # Mask to 16 bits to prevent overflow
                 self._ack_bitfield &= 0xFFFF
+
     def _process_acks(self, ack: int, bitfield: int):
         """Removes acknowledged packets from the sent packets buffer."""
         now = time.time()
         
-        # Helper to process a single ACK and update RTT
         def handle_ack(seq):
             if seq in self._sent_packets:
                 sent_time, _ = self._sent_packets[seq]
-                # Update smoothed RTT
                 measured_rtt = max(0.001, now - sent_time)
                 self.rtt = self.rtt * 0.9 + measured_rtt * 0.1
                 del self._sent_packets[seq]
@@ -282,7 +268,6 @@ class Connection:
     
     def _resend_lost_packets(self):
         """Iterates through sent packets and resends those that are likely lost."""
-        # Use a more conservative threshold and a minimum timeout
         timeout_threshold = max(0.1, self.rtt * 1.5) 
         now = time.time()
         for seq, (sent_time, data) in list(self._sent_packets.items()):
@@ -300,5 +285,3 @@ class Connection:
         """Closes the underlying socket."""
         self.state = ConnectionState.DISCONNECTED
         self._socket.close()
-
-

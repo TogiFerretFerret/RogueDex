@@ -67,37 +67,27 @@ class Battle:
             # to make a move this turn.
             action_pairs.append((user_id, action_list))
 
-        # Sort actions by their priority value, highest first.
-        #
-        # FIX: The lambda function must access the first action *in the list*
-        # (pair[1][0]) to get its priority, since pair[1] is a list.
-        #
-        # BEFORE:
-        # sorted_pairs = sorted(action_pairs, key=lambda pair: pair[1].priority, reverse=True)
-        #
-        # AFTER:
-        sorted_pairs = sorted(action_pairs, key=lambda pair: pair[1][0].priority, reverse=True)
-        #
-        # In Pokémon, you would have a secondary sort here by speed,
-        # which would be handled by the ruleset.
-        # For now, priority-only is fine.
+        # Filter out empty action lists and sort actions by their priority value.
+        valid_action_pairs = []
+        for user_id, action_list in action_pairs:
+            if action_list:
+                valid_action_pairs.append((user_id, action_list))
+        
+        # Sort by the priority of the first action in the list.
+        sorted_pairs = sorted(valid_action_pairs, key=lambda pair: pair[1][0].priority, reverse=True)
 
         for user_id, action_list in sorted_pairs:
-            # Create a generic event for each action. The ruleset's event handlers
-            # will be responsible for interpreting this and creating more specific
-            # events (like DAMAGE, STATUS_APPLIED, etc.).
-            
-            # We assume one action per user for now
-            action = action_list[0]
-            
-            initial_event = Event(
-                event_type="ACTION_REQUEST",
-                payload={
-                    "action": action,
-                    "user_id": user_id  # FIX: Add the user_id!
-                }
-            )
-            self._event_queue.add(initial_event)
+            # Create a generic event for each action.
+            # We currently process all actions in the list for that user.
+            for action in action_list:
+                initial_event = Event(
+                    event_type="ACTION_REQUEST",
+                    payload={
+                        "action": action,
+                        "user_id": user_id
+                    }
+                )
+                self._event_queue.add(initial_event)
 
     def process_turn(self) -> List[Event]:
         """

@@ -138,8 +138,36 @@ class PokemonRuleset(Ruleset):
                  print("Ruleset: Pikachu's Light Ball flared!")
                  offensive_stat *= 2
         
-        # --- 3. Calculate Type Effectiveness ---
+    def _calculate_damage(self, user: Pokemon, target: Pokemon, move: Move, offensive_stat: int) -> int:
+        """
+        Calculates damage using the standard Gen 3+ formula:
+        Damage = ((((2 * Level / 5 + 2) * Power * A / D) / 50) + 2) * Modifier
+        """
+        import random
+        
+        if move.power is None or move.power == 0:
+            return 0
+
+        # Get defensive stat
+        defensive_stat = 0
+        if move.category.lower() == "physical":
+            defensive_stat = target.stats.get("defense", 1) 
+        elif move.category.lower() == "special":
+            defensive_stat = target.stats.get("sp_defense", 1)
+        
+        # Avoid division by zero
+        defensive_stat = max(1, defensive_stat)
+
+        # 1. Base Damage Calculation
+        level_factor = (2 * user.level / 5) + 2
+        raw_damage = (level_factor * move.power * (offensive_stat / defensive_stat)) / 50 + 2
+        
+        # 2. Modifiers
+        modifier = 1.0
+        
+        # Type Effectiveness
         effectiveness = self._get_effectiveness(move.move_type, target.current_types)
+        modifier *= effectiveness
         
         if effectiveness > 1.5:
             print("Ruleset: It's super effective!")
@@ -147,29 +175,77 @@ class PokemonRuleset(Ruleset):
             print("Ruleset: It's not very effective...")
         elif effectiveness == 0:
             print(f"Ruleset: It doesn't affect {target.species_name}...")
-            return # Stop here, no damage.
+            return 0
 
-        # --- 4. Basic Damage Calculation ---
-        # A very simple, non-Poké formula for testing
-        # We'll use a slightly better one: (Power * Atk/Def * Level) / 50 + 2
-        # For now, let's just do something simple.
+        # STAB (Same Type Attack Bonus)
+        # Check against current types (which handles Terastallization automatically)
+        if move.move_type and move.move_type.lower() in [t.lower() for t in user.current_types]:
+            print("Ruleset: STAB bonus applied!")
+            modifier *= 1.5
+
+        # Random Variance (0.85 to 1.00)
+        random_factor = random.uniform(0.85, 1.00)
+        modifier *= random_factor
         
-        # Get defensive stat
-        defensive_stat = 0
+        final_damage = int(raw_damage * modifier)
+        
+        # Ensure at least 1 damage if effectiveness > 0
+        return max(1, final_damage)
+
+    def _handle_action_request(self, event: Event, state: BattleState, queue: EventQueue):
+        """
+        Handles the "ACTION_REQUEST" event created by the Battle class.
+        This is where we determine what the action *does*.
+        """
+        action = event.payload.get("action")
+        user_id = event.payload.get("user_id")
+
+        if not isinstance(action, Move) or not user_id:
+            return
+
+        move: Move = action
+        user = self._combatant_map.get(user_id)
+        target_id = self._find_target_id(user_id, state)
+        target = self._combatant_map.get(target_id)
+
+        if not user or not target or not isinstance(user, Pokemon) or not isinstance(target, Pokemon):
+            print(f"Ruleset Error: Could not find user {user_id} or target {target_id}")
+            return
+
+        print(f"Ruleset: {user.species_name} used {move.name} on {target.species_name}!")
+        
+        # --- 1. Handle Status Moves (no damage) ---
+        if move.category.lower() == "status":
+            print(f"Ruleset: {move.name} is a Status move. (Logic not implemented)")
+            # In a real game, you'd add events for stat changes, status, etc.
+            return
+
+        # --- 2. Calculate Offensive Stat (with Item logic) ---
+        # This is the pattern for manual item logic.
+        # We check the item's id_name and manually apply the logic.
+        
+        offensive_stat = 0
         if move.category.lower() == "physical":
-            defensive_stat = target.stats.get("defense", 1) # Avoid ZeroDivisionError
+            offensive_stat = user.stats.get("attack", 0)
+            # Example: Choice Band
+            if user.held_item and user.held_item.id_name == "choice-band":
+                print("Ruleset: Choice Band boosts Attack!")
+                offensive_stat *= 1.5
+                
         elif move.category.lower() == "special":
-            defensive_stat = target.stats.get("sp_defense", 1) # Avoid ZeroDivisionError
-            
-        # Simplified formula: ( (Power * (Atk/Def)) / 5 ) * Effectiveness
-        # This is still not the real formula, but it's better.
-        base_damage = (move.power * (offensive_stat / defensive_stat)) / 5
-        damage = base_damage * effectiveness
+            offensive_stat = user.stats.get("sp_attack", 0)
+            # Example: Light Ball
+            if user.held_item and user.held_item.id_name == "light-ball" and user.species_name == "Pikachu":
+                 print("Ruleset: Pikachu's Light Ball flared!")
+                 offensive_stat *= 2
         
-        # Make sure damage is at least 1 for effective hits
-        damage = int(max(1, damage))
+        # --- 3. Calculate Damage ---
+        damage = self._calculate_damage(user, target, move, offensive_stat)
+        
+        if damage == 0:
+            return
 
-        # --- 5. Create Damage Event ---
+        # --- 4. Create Damage Event ---
         damage_event = Event(
             event_type="DAMAGE",
             payload={

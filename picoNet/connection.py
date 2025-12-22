@@ -12,14 +12,11 @@ from enum import Enum, auto
 from typing import Dict, List, Optional, Tuple, Any
 
 from .socket import PicoSocket
-from .packet import Packet, PacketHeader, pack_packet, unpack_packet
+from .packet import Packet, PacketHeader, pack_packet, unpack_packet, PROTOCOL_ID
 from .serializer import serialize, deserialize
 
 # --- Constants for the handshake protocol ---
-HANDSHAKE_CHALLENGE = b'\xDE\xAD\xBE\xEF'
-HANDSHAKE_RESPONSE = b'\xCA\xFE\xBA\xBE'
-HANDSHAKE_TIMEOUT = 5.0
-HANDSHAKE_RESEND_INTERVAL = 1.0
+# ... (rest of constants)
 
 class ConnectionState(Enum):
     """Represents the different states of the connection."""
@@ -40,16 +37,17 @@ class Connection:
     Manages a connection to a single remote host, providing a reliable layer
     over the underlying UDP socket.
     """
-    def __init__(self, host: str, port: int):
+    def __init__(self, host: str, port: int, local_port: int = 0):
         """
         Initializes the connection object. Does not establish a connection yet.
 
         Args:
             host: The IP address of the remote host.
             port: The port of the remote host.
+            local_port: The local port to bind to. Defaults to 0 (OS chooses).
         """
         self.remote_address = (host, port)
-        self._socket = PicoSocket('0.0.0.0', 0)
+        self._socket = PicoSocket('0.0.0.0', local_port)
 
         # Connection State
         self.state = ConnectionState.DISCONNECTED
@@ -105,7 +103,7 @@ class Connection:
 
         ack_to_send = self._remote_sequence_number if self._remote_sequence_number != -1 else 0
         header = PacketHeader(
-            protocol_id=12345,
+            protocol_id=PROTOCOL_ID,
             sequence=self._sequence_number,
             ack=ack_to_send,
             ack_bitfield=self._ack_bitfield
@@ -129,7 +127,7 @@ class Connection:
         # Create a packet with empty payload that only carries ACK information
         # Use sequence number 0 and don't track this packet for retransmission
         header = PacketHeader(
-            protocol_id=12345,
+            protocol_id=PROTOCOL_ID,
             sequence=0,  # Special sequence 0 for ACK-only packets
             ack=self._remote_sequence_number,
             ack_bitfield=self._ack_bitfield
@@ -213,6 +211,11 @@ class Connection:
 
             try:
                 packet = unpack_packet(data)
+                
+                # --- FIX: Verify Protocol ID ---
+                if packet.header.protocol_id != PROTOCOL_ID:
+                    continue
+
                 self.last_receive_time = time.time()
                 self._process_received_packet(packet)
             except (ValueError, TypeError):
@@ -237,7 +240,8 @@ class Connection:
 
         if self._remote_sequence_number == -1 or is_sequence_greater(seq, self._remote_sequence_number):
             if self._remote_sequence_number != -1:
-                diff = seq - self._remote_sequence_number
+                # --- FIX: Account for sequence wrapping in diff calculation ---
+                diff = (seq - self._remote_sequence_number) % 65536
                 if diff <= 16:
                     # A new latest packet has arrived. Shift the existing bitfield
                     # to match the new sequence number and mark the bit for the
@@ -251,30 +255,46 @@ class Connection:
             self._remote_sequence_number = seq
         else:
             # An older packet arrived out of order. Mark its bit.
-            diff = self._remote_sequence_number - seq
+            # --- FIX: Account for sequence wrapping in diff calculation ---
+            diff = (self._remote_sequence_number - seq) % 65536
             if diff <= 16:
                 self._ack_bitfield |= (1 << (diff - 1))
                 # Mask to 16 bits to prevent overflow
                 self._ack_bitfield &= 0xFFFF
     def _process_acks(self, ack: int, bitfield: int):
         """Removes acknowledged packets from the sent packets buffer."""
-        if ack in self._sent_packets:
-            del self._sent_packets[ack]
+        now = time.time()
+        
+        # Helper to process a single ACK and update RTT
+        def handle_ack(seq):
+            if seq in self._sent_packets:
+                sent_time, _ = self._sent_packets[seq]
+                # Update smoothed RTT
+                measured_rtt = max(0.001, now - sent_time)
+                self.rtt = self.rtt * 0.9 + measured_rtt * 0.1
+                del self._sent_packets[seq]
+
+        handle_ack(ack)
         for i in range(16):
             if (bitfield >> i) & 1:
                 seq_to_ack = (ack - 1 - i) % 65536
-                if seq_to_ack in self._sent_packets:
-                    del self._sent_packets[seq_to_ack]
+                handle_ack(seq_to_ack)
     
     def _resend_lost_packets(self):
         """Iterates through sent packets and resends those that are likely lost."""
-        timeout_threshold = self.rtt * 1.5 
+        # Use a more conservative threshold and a minimum timeout
+        timeout_threshold = max(0.1, self.rtt * 1.5) 
         now = time.time()
         for seq, (sent_time, data) in list(self._sent_packets.items()):
             if now - sent_time > timeout_threshold:
-                print(f"Resending likely lost packet: {seq}")
+                print(f"Resending likely lost packet: {seq} (RTT: {self.rtt:.3f}s)")
                 self._socket.send(self.remote_address, data)
                 self._sent_packets[seq] = (now, data)
+
+    def close(self):
+        """Closes the underlying socket."""
+        self.state = ConnectionState.DISCONNECTED
+        self._socket.close()
 
     def close(self):
         """Closes the underlying socket."""

@@ -77,11 +77,8 @@ def main():
     t.speed("fastest")
 
     # Set up the network connection
-    connection = Connection(HOST, PORT)
-    
-    # Close the auto-created socket and create a new one on the specific port
-    connection._socket.close()
-    connection._socket = PicoSocket(HOST, PORT)
+    # We specify the local port here (8000) so it acts as a server.
+    connection = Connection(HOST, PORT, local_port=PORT)
     
     actual_port = connection._socket.get_address()[1]
     print(f"[SERVER] Turtle server listening on {HOST}:{actual_port}")

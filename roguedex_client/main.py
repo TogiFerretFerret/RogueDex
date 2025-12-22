@@ -1,9 +1,7 @@
 import sys
 import os
 import random
-from direct.showbase.ShowBase import ShowBase
-from direct.task import Task
-from panda3d.core import AmbientLight, DirectionalLight, Vec4, TextNode
+import pygame
 
 # Add project root to path so we can import modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -15,42 +13,26 @@ from rotomdex.factory import create_pokemon_from_data
 from rotomdex.ruleset import PokemonRuleset
 from roguedex_client.battle_visualizer import BattleVisualizer
 
-class RogueDexClient(ShowBase):
+class RogueDexClient:
     def __init__(self):
-        ShowBase.__init__(self)
+        # Initialize Pygame
+        pygame.init()
+        self.width = 800
+        self.height = 600
+        self.screen = pygame.display.set_mode((self.width, self.height))
+        pygame.display.set_caption("RogueDex Battle Simulator")
+        self.clock = pygame.time.Clock()
+        self.font = pygame.font.SysFont("Arial", 18)
 
-        # Basic Scene Setup
-        self.setup_lighting()
-        self.setup_camera()
+        # Game State
+        self.running = True
+        self.turn_logs = []
         
-        # Initialize Game Logic
+        # Initialize Battle
         self.init_battle()
         
         # Initialize Visualizer
-        self.visualizer = BattleVisualizer(self)
-        self.visualizer.update(self.battle.state)
-        
-        # Start Battle Loop Task
-        self.taskMgr.doMethodLater(2.0, self.game_loop, "GameLoopTask")
-        
-        print("RogueDex Client Initialized")
-
-    def setup_lighting(self):
-        ambient = AmbientLight('ambient')
-        ambient.setColor(Vec4(0.5, 0.5, 0.5, 1))
-        ambient_node = self.render.attachNewNode(ambient)
-        self.render.setLight(ambient_node)
-        
-        directional = DirectionalLight('directional')
-        directional.setColor(Vec4(0.8, 0.8, 0.8, 1))
-        directional_node = self.render.attachNewNode(directional)
-        directional_node.setHpr(0, -60, 0)
-        self.render.setLight(directional_node)
-
-    def setup_camera(self):
-        self.disableMouse()
-        self.camera.setPos(0, -40, 20)
-        self.camera.lookAt(0, 0, 0)
+        self.visualizer = BattleVisualizer(self.screen, self.font, self.combatant_map)
 
     def init_battle(self):
         print("Initializing Battle...")
@@ -63,12 +45,10 @@ class RogueDexClient(ShowBase):
             sys.exit(1)
             
         # Create Teams
-        # We'll pick two random pokemon if specific ones aren't guaranteed, 
-        # but let's try some starters.
         p1_name = "pikachu" if "pikachu" in pokemon_data else list(pokemon_data.keys())[0]
         p2_name = "charmander" if "charmander" in pokemon_data else list(pokemon_data.keys())[1]
         
-        p1_moves = ["tackle", "thundershock"] # Simplified
+        p1_moves = ["tackle", "thunder-shock"] 
         p2_moves = ["scratch", "ember"]
         
         # Create Combatants
@@ -78,17 +58,15 @@ class RogueDexClient(ShowBase):
         teams = [[p1], [p2]]
         
         # Create Ruleset
-        combatant_map = {p1.id: p1, p2.id: p2}
-        ruleset = PokemonRuleset(combatant_map)
+        self.combatant_map = {p1.id: p1, p2.id: p2}
+        ruleset = PokemonRuleset(self.combatant_map)
         
         # Create Battle
         self.battle = Battle(teams, ruleset)
-        self.combatant_map = combatant_map # Keep reference for easy access
         
         print(f"Battle Started: {p1.species_name} vs {p2.species_name}")
 
-    def game_loop(self, task):
-        # Simulate a turn
+    def process_turn(self):
         print(f"\n--- Turn {self.battle.state.turn_number + 1} ---")
         
         # 1. Choose Random Actions
@@ -101,27 +79,42 @@ class RogueDexClient(ShowBase):
             if combatant.moves:
                 chosen_move = random.choice(combatant.moves)
                 actions[active_id] = [chosen_move]
-                print(f"{combatant.species_name} chose {chosen_move.name}")
-            else:
-                print(f"{combatant.species_name} has no moves!")
-
+                # Log to console for debug
+                # print(f"{combatant.species_name} chose {chosen_move.name}")
+        
         # 2. Submit Actions
         self.battle.submit_actions(actions)
         
         # 3. Process Turn
-        logs = self.battle.process_turn()
+        self.turn_logs = self.battle.process_turn()
         
-        # 4. Update Visualizer
-        self.visualizer.update(self.battle.state)
-        
-        # Check for faint/game over (simplified)
+        # Check game over (simplified)
         for c in self.combatant_map.values():
             if c.current_hp <= 0:
                 print(f"{c.species_name} is defeated!")
-                # For demo, just reset or stop
-                # return Task.done
-        
-        return Task.again
+                self.turn_logs.append(f"{c.species_name} is defeated!")
+
+    def run(self):
+        print("Press SPACE to simulate a turn.")
+        while self.running:
+            # Event Handling
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        self.process_turn()
+                    elif event.key == pygame.K_ESCAPE:
+                        self.running = False
+
+            # Draw
+            self.visualizer.draw(self.battle.state, self.turn_logs)
+            
+            pygame.display.flip()
+            self.clock.tick(60)
+
+        pygame.quit()
+        sys.exit()
 
 if __name__ == "__main__":
     app = RogueDexClient()

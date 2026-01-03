@@ -80,7 +80,13 @@ class VirtualMachine:
 
     def _define_native(self, name: str, function: callable):
         self.globals[name] = NativeFunction(name, function)
-
+    def execute(self, bytecode: RogueScriptFunction)->(InterpretResult,any):
+        self.stack=[]
+        self.frames=[]
+        self.push(bytecode)
+        self._call(bytecode,0)
+        result,value=self.run()
+        return (result,value)
     def interpret(self, source: str) -> (InterpretResult, any):
         """
         The main public-facing method.
@@ -118,11 +124,11 @@ class VirtualMachine:
             return (result, value)
 
         except (ParseError, CompileError) as e:
-            # SILENCED: print(e)
+            print(e)
             return (InterpretResult.COMPILE_ERROR, None)
         except RogueScriptRuntimeError as e:
             # The run loop raised an error.
-            # SILENCED: self._print_stack_trace(e)
+            self._print_stack_trace(e)
             # FIX: Re-raise it for the test harness to catch
             raise e
             
@@ -258,8 +264,9 @@ class VirtualMachine:
             # --- Statements ---
             elif op == OpCode.OP_PRINT:
                 # SILENCED: print(self.pop())
-                self.pop() # Still need to pop the value
-                
+                print(self.pop())
+                # TODO: This should be some sort of logging in-game
+                #self.pop() # Still need to pop the value
             # --- Functions ---
             elif op == OpCode.OP_CALL:
                 arg_count = self._read_byte(frame)
@@ -360,20 +367,19 @@ class VirtualMachine:
         raise RogueScriptRuntimeError(message, line)
 
     def _print_stack_trace(self, error: RogueScriptRuntimeError):
-        # SILENCED: print(error) # Print the main error message
-        pass # Do nothing
+        print(error) # Print the main error message
         
         # Walk the call stack *backward*
-        # for frame in reversed(self.frames):
-        #     line = frame.current_line()
-        #     # Handle error at the very start of a function
-        #     if line == 0 and len(frame.function.chunk.lines) > 0:
-        #         line = frame.function.chunk.lines[0]
+        for frame in reversed(self.frames):
+            line = frame.current_line()
+            # Handle error at the very start of a function
+            if line == 0 and len(frame.function.chunk.lines) > 0:
+                line = frame.function.chunk.lines[0]
                 
-        #     func_name = frame.function.name
-        #     if not func_name:
-        #         func_name = "<script>"
-        #     print(f"  [line {line}] in {func_name}()")
+            func_name = frame.function.name
+            if not func_name:
+                func_name = "<script>"
+            print(f"  [line {line}] in {func_name}()")
 
     def _debug_trace_execution(self, frame: CallFrame):
         """A useful debug print-out for tracing."""

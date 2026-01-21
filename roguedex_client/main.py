@@ -63,10 +63,12 @@ class RogueDexTetrisClient:
         self.auto_mode, self.last_bot_tick, self.connected, self.pending_start, self.running = False, 0, False, False, True
 
     def _update_fonts(self):
-        # Scale fonts based on window height slightly or keep static
-        self.font = pygame.font.Font(None, 36)
-        self.small_font = pygame.font.Font(None, 28)
-        self.title_font = pygame.font.Font(None, 72)
+        # Scale fonts based on window height
+        base_h = 900
+        scale = self.height / base_h
+        self.font = pygame.font.Font(None, int(36 * scale))
+        self.small_font = pygame.font.Font(None, int(28 * scale))
+        self.title_font = pygame.font.Font(None, int(72 * scale))
 
     def _load_info_text(self):
         try:
@@ -87,6 +89,7 @@ class RogueDexTetrisClient:
     def start_game(self, multiplayer=False):
         if self.pending_start or self.phase == GamePhase.PLAYING: return
         self.opponents, self.update_timer, self.last_beat_int, self.last_lines_cleared, self.connected = {}, 0, 0, 0, False
+        self.key_timers = {}
         if multiplayer and self.server_ip:
             self.pending_start = True
             player_id = f"Player_{random.randint(1000, 9999)}"
@@ -167,9 +170,9 @@ class RogueDexTetrisClient:
     def _handle_info_input(self, key):
         if key == pygame.K_ESCAPE or key == pygame.K_RETURN: self.phase = GamePhase.MENU
         elif key == pygame.K_UP: self.info_scroll = max(0, self.info_scroll - 1)
-        elif key == pygame.K_DOWN: self.info_scroll = min(len(self.info_lines) - 25, self.info_scroll + 1)
+        elif key == pygame.K_DOWN: self.info_scroll = min(max(0, len(self.info_lines) - 25), self.info_scroll + 1)
         elif key == pygame.K_PAGEUP: self.info_scroll = max(0, self.info_scroll - 10)
-        elif key == pygame.K_PAGEDOWN: self.info_scroll = min(len(self.info_lines) - 25, self.info_scroll + 10)
+        elif key == pygame.K_PAGEDOWN: self.info_scroll = min(max(0, len(self.info_lines) - 25), self.info_scroll + 10)
 
     def _handle_game_keydown(self, key):
         if not self.engine: return
@@ -274,8 +277,8 @@ class RogueDexTetrisClient:
         pygame.display.flip()
 
     def _draw_menu(self):
-        cx, cy = self.width // 2, self.height // 2
-        # Title at 20% height
+        cx = self.width // 2
+        # Title at 15% height
         title = self.title_font.render("RHYTHM TETRIS", True, (0, 255, 255))
         self.screen.blit(title, title.get_rect(center=(cx, self.height * 0.15)))
         
@@ -287,22 +290,22 @@ class RogueDexTetrisClient:
         start_y = self.height * 0.25
         for i, l in enumerate(opts):
             text = self.font.render(l, True, (200, 200, 200))
-            self.screen.blit(text, text.get_rect(center=(cx, start_y + i * 50)))
+            self.screen.blit(text, text.get_rect(center=(cx, start_y + i * (self.height * 0.055))))
             
         inst = ["MECHANICS: SRS Rotation, 7-Bag, Rhythmic Attacks", 
                 "RHYTHM: Hit actions on the GREEN bar for Score/Attack bonuses!",
                 "BOTS: Edit 'bot_script.rogue' and toggle with [A]!",
                 "SETTINGS: Customize DAS/ARR/Keybinds in the Settings menu."]
         
-        # Instructions at 75% height
-        inst_y = self.height * 0.70
+        # Instructions at bottom 20%
+        inst_y = self.height * 0.75
         for i, l in enumerate(inst):
             color = (100, 255, 100) if i == 1 else (150, 150, 150)
             text = self.small_font.render(l, True, color)
-            self.screen.blit(text, text.get_rect(center=(cx, inst_y + i * 35)))
+            self.screen.blit(text, text.get_rect(center=(cx, inst_y + i * (self.height * 0.04))))
 
     def _draw_settings(self):
-        cx, cy = self.width // 2, self.height // 2
+        cx = self.width // 2
         title = self.title_font.render("SETTINGS", True, (0, 255, 255))
         self.screen.blit(title, title.get_rect(center=(cx, self.height * 0.15)))
         
@@ -313,10 +316,10 @@ class RogueDexTetrisClient:
                    "ARR (ms)": f"{int(self.arr_rate*1000)}", "Infinite Soft Drop": "ON" if self.soft_drop_infinite else "OFF", 
                    "Edit Keybinds": "", "Back": ""}.get(opt, "")
             text = self.font.render(f"{opt}: {val}", True, color)
-            self.screen.blit(text, text.get_rect(center=(cx, start_y + i * 60)))
+            self.screen.blit(text, text.get_rect(center=(cx, start_y + i * (self.height * 0.07))))
 
     def _draw_keymap(self):
-        cx, cy = self.width // 2, self.height // 2
+        cx = self.width // 2
         title = self.title_font.render("KEYBIND EDITOR", True, (0, 255, 255))
         self.screen.blit(title, title.get_rect(center=(cx, self.height * 0.15)))
         
@@ -326,7 +329,7 @@ class RogueDexTetrisClient:
             color = (255, 255, 0) if i == self.keymap_index else (200, 200, 200)
             key_name = pygame.key.name(self.keybinds[act]).upper() if act in self.keybinds else ""
             text = self.font.render(f"{act.replace('_',' ').upper()}: {key_name}", True, color)
-            self.screen.blit(text, text.get_rect(center=(cx, start_y + i * 50)))
+            self.screen.blit(text, text.get_rect(center=(cx, start_y + i * (self.height * 0.06))))
             
         if self.binding_action:
             overlay = pygame.Surface((self.width, self.height)); overlay.set_alpha(180); overlay.fill((0,0,0)); self.screen.blit(overlay, (0,0))
@@ -336,10 +339,10 @@ class RogueDexTetrisClient:
     def _draw_info(self):
         cx = self.width // 2
         title = self.font.render("GAME MECHANICS (Scroll with Arrows/PgUp/PgDn)", True, (0, 255, 255))
-        self.screen.blit(title, title.get_rect(center=(cx, 40)))
+        self.screen.blit(title, title.get_rect(center=(cx, self.height * 0.05)))
         
-        y_start = 100
-        visible_count = int((self.height - 200) / 25) # Dynamic count based on height
+        y_start = self.height * 0.12
+        visible_count = int((self.height * 0.8) / (self.height * 0.03)) # Approximate
         for i in range(visible_count):
             idx = i + self.info_scroll
             if idx >= len(self.info_lines): break
@@ -351,10 +354,10 @@ class RogueDexTetrisClient:
             else: fnt = self.small_font
             
             text = fnt.render(line, True, color)
-            self.screen.blit(text, (60, y_start + i * 25))
+            self.screen.blit(text, (self.width * 0.06, y_start + i * (self.height * 0.03)))
             
         help_msg = self.small_font.render("Press ESC or ENTER to return", True, (150, 150, 150))
-        self.screen.blit(help_msg, help_msg.get_rect(center=(cx, self.height - 40)))
+        self.screen.blit(help_msg, help_msg.get_rect(center=(cx, self.height * 0.95)))
 
 if __name__ == "__main__":
     RogueDexTetrisClient().run()

@@ -24,6 +24,7 @@ class GamePhase(Enum):
     MENU = auto()
     SETTINGS = auto()
     KEYMAP = auto()
+    INFO = auto()
     PLAYING = auto()
 
 class RogueDexTetrisClient:
@@ -34,6 +35,7 @@ class RogueDexTetrisClient:
         pygame.display.set_caption("RogueDex Rhythm Tetris")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 30)
+        self.small_font = pygame.font.Font(None, 24)
         self.title_font = pygame.font.Font(None, 60)
         self.bot_source = load_bot_script()
         try: self.sound_manager = SoundManager()
@@ -54,8 +56,19 @@ class RogueDexTetrisClient:
         self.keymap_index = 0
         self.binding_action = None
         
+        self.info_lines = []
+        self.info_scroll = 0
+        self._load_info_text()
+        
         self.key_timers, self.engine, self.visualizer, self.bot = {}, None, None, None
         self.auto_mode, self.last_bot_tick, self.connected, self.pending_start, self.running = False, 0, False, False, True
+
+    def _load_info_text(self):
+        try:
+            with open("MECHANICS.md", "r") as f:
+                self.info_lines = [line.rstrip() for line in f.readlines()]
+        except:
+            self.info_lines = ["Could not load MECHANICS.md"]
 
     def run(self):
         while self.running:
@@ -84,6 +97,7 @@ class RogueDexTetrisClient:
                 if self.phase == GamePhase.MENU: self._handle_menu_input(event.key)
                 elif self.phase == GamePhase.SETTINGS: self._handle_settings_input(event)
                 elif self.phase == GamePhase.KEYMAP: self._handle_keymap_input(event)
+                elif self.phase == GamePhase.INFO: self._handle_info_input(event.key)
                 elif self.phase == GamePhase.PLAYING: self._handle_game_keydown(event.key)
             elif event.type == pygame.KEYUP:
                 if self.phase == GamePhase.PLAYING and event.key in self.key_timers: del self.key_timers[event.key]
@@ -94,6 +108,7 @@ class RogueDexTetrisClient:
             if self.server_ip: self.start_game(multiplayer=True)
             else: self.phase = GamePhase.SETTINGS 
         elif key == pygame.K_3: self.phase = GamePhase.SETTINGS
+        elif key == pygame.K_4: self.phase = GamePhase.INFO; self.info_scroll = 0
         elif key == pygame.K_a: self.auto_mode = not self.auto_mode
         elif key == pygame.K_r: self.bot_source = load_bot_script()
         elif key == pygame.K_ESCAPE: self.running = False
@@ -136,6 +151,13 @@ class RogueDexTetrisClient:
         elif key == pygame.K_RETURN:
             if self.keymap_index < len(actions): self.binding_action = actions[self.keymap_index]
             else: self.phase = GamePhase.SETTINGS
+
+    def _handle_info_input(self, key):
+        if key == pygame.K_ESCAPE or key == pygame.K_RETURN: self.phase = GamePhase.MENU
+        elif key == pygame.K_UP: self.info_scroll = max(0, self.info_scroll - 1)
+        elif key == pygame.K_DOWN: self.info_scroll = min(len(self.info_lines) - 20, self.info_scroll + 1)
+        elif key == pygame.K_PAGEUP: self.info_scroll = max(0, self.info_scroll - 10)
+        elif key == pygame.K_PAGEDOWN: self.info_scroll = min(len(self.info_lines) - 20, self.info_scroll + 10)
 
     def _handle_game_keydown(self, key):
         if not self.engine: return
@@ -226,6 +248,7 @@ class RogueDexTetrisClient:
         if self.phase == GamePhase.MENU: self._draw_menu()
         elif self.phase == GamePhase.SETTINGS: self._draw_settings()
         elif self.phase == GamePhase.KEYMAP: self._draw_keymap()
+        elif self.phase == GamePhase.INFO: self._draw_info()
         elif self.phase == GamePhase.PLAYING:
             self.visualizer.draw(self.engine.state, opponents=self.opponents)
             if self.auto_mode:
@@ -242,7 +265,7 @@ class RogueDexTetrisClient:
         cx, cy = self.width // 2, self.height // 2 - 100
         title = self.title_font.render("RHYTHM TETRIS", True, (0, 255, 255))
         self.screen.blit(title, title.get_rect(center=(cx, cy)))
-        opts = ["Press [1] for Singleplayer", f"Press [2] for Multiplayer {'(Ready)' if self.server_ip else '(No IP)'}", "Press [3] for Settings", f"Press [A] to Toggle Bot {'(ON)' if self.auto_mode else '(OFF)'}", "Press [R] to Reload Bot", "Press [ESC] to Quit"]
+        opts = ["Press [1] for Singleplayer", f"Press [2] for Multiplayer {'(Ready)' if self.server_ip else '(No IP)'}", "Press [3] for Settings", "Press [4] for Detailed Info", f"Press [A] to Toggle Bot {'(ON)' if self.auto_mode else '(OFF)'}", "Press [R] to Reload Bot", "Press [ESC] to Quit"]
         for i, l in enumerate(opts):
             text = self.font.render(l, True, (200, 200, 200))
             self.screen.blit(text, text.get_rect(center=(cx, cy + 80 + i * 40)))
@@ -282,6 +305,29 @@ class RogueDexTetrisClient:
             overlay = pygame.Surface((self.width, self.height)); overlay.set_alpha(180); overlay.fill((0,0,0)); self.screen.blit(overlay, (0,0))
             msg = self.font.render(f"PRESS ANY KEY FOR: {self.binding_action.replace('_',' ').upper()}", True, (255, 255, 255))
             self.screen.blit(msg, msg.get_rect(center=(cx, self.height // 2)))
+
+    def _draw_info(self):
+        self.screen.fill((30, 30, 40))
+        cx = self.width // 2
+        title = self.font.render("GAME MECHANICS (Scroll with Arrows/PgUp/PgDn)", True, (0, 255, 255))
+        self.screen.blit(title, title.get_rect(center=(cx, 30)))
+        
+        y_start = 70
+        visible_count = 30
+        for i in range(visible_count):
+            idx = i + self.info_scroll
+            if idx >= len(self.info_lines): break
+            line = self.info_lines[idx]
+            color = (255, 255, 255)
+            if line.startswith("# "): color = (0, 255, 255); font = self.font
+            elif line.startswith("## "): color = (255, 255, 0); font = self.font
+            else: font = self.small_font
+            
+            text = font.render(line, True, color)
+            self.screen.blit(text, (50, y_start + i * 22))
+            
+        help_msg = self.small_font.render("Press ESC or ENTER to return", True, (150, 150, 150))
+        self.screen.blit(help_msg, help_msg.get_rect(center=(cx, self.height - 30)))
 
 if __name__ == "__main__":
     RogueDexTetrisClient().run()

@@ -22,9 +22,9 @@ class BattleVisualizer:
         # combatant_map is kept for signature compatibility but unused
         self.combatant_map = combatant_map 
         
-        self.small_font = pygame.font.SysFont("Arial", 14)
+        self.small_font = pygame.font.Font(None, 20)
 
-    def draw(self, state: GameState, logs: list = None):
+    def draw(self, state: GameState, logs: list = None, opponents: dict = None):
         """
         Draws the complete Tetris game state.
         """
@@ -41,9 +41,41 @@ class BattleVisualizer:
         self._draw_stats(state)
         self._draw_rhythm_indicator(state)
         
+        # Draw Opponents
+        if opponents:
+            self._draw_opponents(opponents)
+
         if state.game_over:
             self._draw_game_over()
 
+    def _draw_opponents(self, opponents):
+        # Position them on the far right
+        x_start = GRID_OFFSET_X + GRID_WIDTH * BLOCK_SIZE + 180
+        y_start = GRID_OFFSET_Y
+        
+        mini_block = 10
+        for i, (oid, data) in enumerate(opponents.items()):
+            if i > 2: break # Max 3 opponents visible
+            
+            ox = x_start + i * (GRID_WIDTH * mini_block + 20)
+            
+            # Label
+            name = self.small_font.render(oid[:10], True, TEXT_COLOR)
+            self.screen.blit(name, (ox, y_start - 20))
+            
+            # Board
+            grid = data.get("grid", [])
+            pygame.draw.rect(self.screen, GRID_BG_COLOR, (ox, y_start, GRID_WIDTH * mini_block, GRID_HEIGHT * mini_block))
+            for gy, row in enumerate(grid):
+                for gx, cell in enumerate(row):
+                    if cell != 0:
+                        color = COLORS.get(cell, (100, 100, 100))
+                        pygame.draw.rect(self.screen, color, (ox + gx * mini_block, y_start + gy * mini_block, mini_block, mini_block))
+            
+            # Score
+            score = self.small_font.render(f"S: {data.get('score', 0)}", True, TEXT_COLOR)
+            self.screen.blit(score, (ox, y_start + GRID_HEIGHT * mini_block + 5))
+    
     def _draw_rhythm_indicator(self, state: GameState):
         x_start = GRID_OFFSET_X
         y_pos = GRID_OFFSET_Y + GRID_HEIGHT * BLOCK_SIZE + 20

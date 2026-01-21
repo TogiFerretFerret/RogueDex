@@ -1,7 +1,7 @@
 import sys
 import os
 import time
-import json
+import random
 from dataclasses import dataclass, field
 from typing import Dict, Tuple, Optional
 
@@ -12,33 +12,37 @@ from picoNet.socket import PicoSocket
 from picoNet.packet import Packet, PacketHeader, PROTOCOL_ID, pack_packet, unpack_packet
 from picoNet.serializer import serialize, deserialize
 
-# Extend Known Keys for Tetris
-# Note: In a real scenario, we'd update serializer.py, but for now we'll rely on string keys mostly
-# or just stick to 'command', 'player_id' which are known.
-
 @dataclass
 class PlayerSession:
     address: Tuple[str, int]
     player_id: str
     last_seen: float
-    # Game State snapshot (simplified)
     score: int = 0
-    board_preview: list = field(default_factory=list) # simplified grid
+    grid: list = field(default_factory=list)
 
 class TetrisServer:
     def __init__(self, port: int = 4242):
         self.socket = PicoSocket("0.0.0.0", port)
         self.players: Dict[str, PlayerSession] = {} # player_id -> Session
         self.address_map: Dict[Tuple[str, int], str] = {} # address -> player_id
+        self.match_seed = random.randint(0, 999999)
         
         self.running = True
-        print(f"Tetris Server started on port {port}")
+        print(f"Tetris Server started on port {port}. Match Seed: {self.match_seed}")
 
     def run(self):
         while self.running:
             self._process_network()
-            # Server tick updates could go here (e.g. matchmaking, timeout)
-            time.sleep(0.001) # Avoid busy loop
+            # Cleanup stale players (e.g. 30s timeout)
+            now = time.time()
+            stale = [pid for pid, s in self.players.items() if now - s.last_seen > 30]
+            for pid in stale:
+                print(f"Player {pid} timed out.")
+                addr = self.players[pid].address
+                if addr in self.address_map: del self.address_map[addr]
+                del self.players[pid]
+                
+            time.sleep(0.001)
 
     def _process_network(self):
         while True:
@@ -56,7 +60,7 @@ class TetrisServer:
                 self._handle_message(payload, addr)
                 
             except Exception as e:
-                print(f"Error processing packet from {addr}: {e}")
+                pass # Silently ignore malformed
 
     def _handle_message(self, message: dict, addr: Tuple[str, int]):
         cmd = message.get("command")
@@ -70,10 +74,15 @@ class TetrisServer:
 
     def _handle_login(self, message: dict, addr: Tuple[str, int]):
         player_id = message.get("player_id")
-        if not player_id:
-            return
+        if not player_id: return
             
         print(f"Player {player_id} connected from {addr}")
+        
+        # If player already exists, update address
+        if player_id in self.players:
+            old_addr = self.players[player_id].address
+            if old_addr in self.address_map: del self.address_map[old_addr]
+            
         self.players[player_id] = PlayerSession(
             address=addr,
             player_id=player_id,
@@ -81,35 +90,48 @@ class TetrisServer:
         )
         self.address_map[addr] = player_id
         
-        # Ack
-        self._send_to(addr, {"command": "welcome", "server_time": time.time()})
+        self._send_to(addr, {
+            "command": "welcome", 
+            "server_time": time.time(),
+            "match_seed": self.match_seed
+        })
 
     def _handle_update(self, message: dict, addr: Tuple[str, int]):
-        # Received game state update from client
         player_id = self.address_map.get(addr)
-        if not player_id:
-            return
+        if not player_id: return
 
         session = self.players[player_id]
         session.last_seen = time.time()
         session.score = message.get("score", 0)
+        session.grid = message.get("grid", [])
         
-        # Broadcast to others?
-        # For now, just print high scores occasionally or simple echo
-        pass
+        # Broadcast this update to everyone ELSE
+        update_pkg = {
+            "command": "opponent_update",
+            "player_id": player_id,
+            "score": session.score,
+            "grid": session.grid
+        }
+        
+        for pid, other in self.players.items():
+            if pid != player_id:
+                self._send_to(other.address, update_pkg)
 
     def _handle_attack(self, message: dict, addr: Tuple[str, int]):
-        # Player sent garbage lines to opponent
         sender_id = self.address_map.get(addr)
-        if not sender_id:
-            return
+        if not sender_id: return
             
         lines = message.get("lines", 0)
         target_id = message.get("target_id")
         
-        if target_id and target_id in self.players:
+        if not target_id:
+            potential_targets = [pid for pid in self.players if pid != sender_id]
+            if potential_targets:
+                target_id = random.choice(potential_targets)
+        
+        if target_id and target_id in self.players and target_id != sender_id:
             target_session = self.players[target_id]
-            print(f"{sender_id} sent {lines} lines to {target_id}")
+            print(f"ATTACK: {sender_id} -> {target_id} ({lines} lines)")
             
             self._send_to(target_session.address, {
                 "command": "garbage",
@@ -118,16 +140,17 @@ class TetrisServer:
             })
 
     def _send_to(self, addr: Tuple[str, int], data: dict):
-        payload_bytes = serialize(data)
-        header = PacketHeader() # Defaults are fine for now
-        packet = Packet(header, payload_bytes)
-        packet_bytes = pack_packet(packet)
-        self.socket.send(addr, packet_bytes)
+        try:
+            payload_bytes = serialize(data)
+            header = PacketHeader()
+            packet = Packet(header, payload_bytes)
+            self.socket.send(addr, pack_packet(packet))
+        except:
+            pass
 
 if __name__ == "__main__":
     server = TetrisServer()
     try:
         server.run()
     except KeyboardInterrupt:
-        print("Server stopping...")
         server.socket.close()

@@ -5,9 +5,10 @@ from .state import GameState, GRID_WIDTH, TOTAL_HEIGHT, BUFFER_HEIGHT
 from .tetromino import Tetromino, SHAPES, WALL_KICKS_JLSTZ, WALL_KICKS_I
 
 class TetrisEngine:
-    def __init__(self, bpm: float = 120.0):
+    def __init__(self, bpm: float = 120.0, seed: Optional[int] = None):
         self.state = GameState()
         self.state.bpm = bpm
+        self.random = random.Random(seed) if seed is not None else random.Random()
         self.bag = []
         self._fill_bag()
         
@@ -26,7 +27,7 @@ class TetrisEngine:
 
     def _fill_bag(self):
         new_bag = list(SHAPES.keys())
-        random.shuffle(new_bag)
+        self.random.shuffle(new_bag)
         self.bag.extend(new_bag)
 
     def spawn_piece(self):
@@ -174,7 +175,7 @@ class TetrisEngine:
         
         for _ in range(lines):
             del self.state.grid[0]
-            hole = random.randint(0, GRID_WIDTH - 1)
+            hole = self.random.randint(0, GRID_WIDTH - 1)
             new_row = ['G'] * GRID_WIDTH
             new_row[hole] = 0
             self.state.grid.append(new_row)

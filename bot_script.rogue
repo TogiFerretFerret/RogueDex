@@ -1,0 +1,16 @@
+// Default RogueScript Bot
+// Edit this file to customize your bot!
+
+var x = get_piece_x();
+var shape = get_piece_shape();
+
+// Simple Logic: Move towards center (x=4)
+if (x < 4) {
+    move_right();
+}
+if (x > 4) {
+    move_left();
+}
+
+// Always hard drop for now
+hard_drop();

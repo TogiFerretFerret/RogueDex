@@ -1,6 +1,6 @@
 import random
 import time
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 from .state import GameState, GRID_WIDTH, TOTAL_HEIGHT, BUFFER_HEIGHT
 from .tetromino import Tetromino, SHAPES, WALL_KICKS_JLSTZ, WALL_KICKS_I
 
@@ -14,11 +14,13 @@ class TetrisEngine:
         # Timing
         self.start_time = time.time()
         self.last_drop_time = self.start_time
-        self.gravity_delay = 1.0 
         
-        # Rhythm Window (seconds)
-        # 120 BPM = 0.5s per beat. Window of 0.1s is quite tight.
-        self.beat_window = 0.1 
+        # Gravity (Seconds per row)
+        # Level 1: 0.8s, Level 10: ~0.15s
+        self.gravity_delay = 0.8 
+        
+        # Rhythm Window (seconds) - Widened slightly
+        self.beat_window = 0.15 
         
         self.spawn_piece()
 
@@ -37,7 +39,10 @@ class TetrisEngine:
                 self._fill_bag()
 
         shape = self.state.next_queue.pop(0)
-        self.state.current_piece = Tetromino(shape=shape)
+        # Spawn visible just above board (Row 18, Visible starts at 20)
+        spawn_y = BUFFER_HEIGHT - 2
+        
+        self.state.current_piece = Tetromino(shape=shape, y=spawn_y)
         self.last_drop_time = time.time()
         
         if self._check_collision(self.state.current_piece):
@@ -51,6 +56,8 @@ class TetrisEngine:
                 return True
             if y >= TOTAL_HEIGHT:
                 return True
+            # Allow existing in buffer (y < 20)
+            # Collision if occupied
             if y >= 0 and self.state.grid[y][x] != 0:
                 return True
         return False
@@ -64,39 +71,36 @@ class TetrisEngine:
         offset = abs(current_beat - round(current_beat)) * beat_duration
         return (offset <= self.beat_window, offset)
 
-    def submit_action(self, action_type: str, *args) -> bool:
+    def submit_action(self, action_type: str, *args) -> str:
         """
-        Executes an action and applies rhythm bonuses.
-        action_type: 'move_left', 'move_right', 'move_down', 'rotate_cw', 'rotate_ccw', 'hard_drop', 'hold'
+        Executes an action. Returns a result string event ('moved', 'rotated', 'dropped', 'none', 'game_over').
         """
         if self.state.game_over:
-            return False
+            return 'game_over'
 
         on_beat, offset = self.is_on_beat()
         multiplier = 2.0 if on_beat else 1.0
         
-        success = False
+        result = 'none'
+        
         if action_type == 'move_left':
-            success = self.move(-1, 0)
+            if self.move(-1, 0): result = 'moved'
         elif action_type == 'move_right':
-            success = self.move(1, 0)
+            if self.move(1, 0): result = 'moved'
         elif action_type == 'move_down':
-            success = self.move(0, 1)
+            if self.move(0, 1): result = 'moved'
         elif action_type == 'rotate_cw':
-            success = self.rotate(True)
+            if self.rotate(True): result = 'rotated'
         elif action_type == 'rotate_ccw':
-            success = self.rotate(False)
+            if self.rotate(False): result = 'rotated'
         elif action_type == 'hard_drop':
             self.hard_drop(multiplier)
-            success = True
+            result = 'dropped' # Hard drop usually implies lock
         elif action_type == 'hold':
             self.hold()
-            success = True
+            result = 'hold'
             
-        if success and on_beat:
-            self.state.score += int(10 * multiplier)
-            
-        return success
+        return result
 
     def move(self, dx: int, dy: int) -> bool:
         if self.state.game_over or not self.state.current_piece:
@@ -156,17 +160,47 @@ class TetrisEngine:
         self.state.score += int(dropped_cells * 2 * multiplier)
         self.lock_piece()
 
+    def add_garbage(self, lines: int):
+        if not hasattr(self.state, 'garbage_queue'):
+            self.state.garbage_queue = 0
+        self.state.garbage_queue += lines
+
+    def _process_garbage(self):
+        if not hasattr(self.state, 'garbage_queue') or self.state.garbage_queue == 0:
+            return
+            
+        lines = self.state.garbage_queue
+        self.state.garbage_queue = 0
+        
+        for _ in range(lines):
+            del self.state.grid[0]
+            hole = random.randint(0, GRID_WIDTH - 1)
+            new_row = ['G'] * GRID_WIDTH
+            new_row[hole] = 0
+            self.state.grid.append(new_row)
+
     def lock_piece(self):
         if not self.state.current_piece:
             return
 
+        locked_above_buffer = True
+        
         for x, y in self.state.current_piece.get_blocks():
             if 0 <= y < TOTAL_HEIGHT:
                 self.state.grid[y][x] = self.state.current_piece.shape
+                # If ANY block is visible (>= BUFFER_HEIGHT), we are safe from strict top-out
+                if y >= BUFFER_HEIGHT:
+                    locked_above_buffer = False
             elif y < 0:
                  self.state.game_over = True
 
         self._clear_lines()
+        self._process_garbage()
+        
+        # Strict Game Over: Locked entirely above visible area
+        if locked_above_buffer:
+            self.state.game_over = True
+        
         self.state.current_piece = None
         self.spawn_piece()
 
@@ -210,9 +244,7 @@ class TetrisEngine:
         else:
             temp = self.state.hold_piece
             self.state.hold_piece = current_shape
-            self.state.current_piece = Tetromino(shape=temp)
-            self.state.current_piece.x = 3
-            self.state.current_piece.y = -1
+            self.state.current_piece = Tetromino(shape=temp, y=BUFFER_HEIGHT - 2)
             self.last_drop_time = time.time()
         
         self.state.can_hold = False
@@ -221,13 +253,19 @@ class TetrisEngine:
         if self.state.game_over or not self.state.current_piece:
             return
 
-        # Update current beat in state for visualizer
+        # Update current beat
         elapsed = time.time() - self.start_time
         beat_duration = 60.0 / self.state.bpm
         self.state.current_beat = elapsed / beat_duration
 
+        # Gravity scaling
+        # Level 1: 0.8s
+        # Level 20: 0.05s
+        # Linear interp: 0.8 -> 0.05 over 19 levels steps
+        # Slope = (0.05 - 0.8) / 19 = -0.75 / 19 ≈ -0.039
+        
         speed_level = min(20, self.state.level)
-        self.gravity_delay = max(0.05, (1.0 - (speed_level - 1) * 0.05))
+        self.gravity_delay = max(0.05, 0.8 - ((speed_level - 1) * 0.04))
 
         now = time.time()
         if now - self.last_drop_time > self.gravity_delay:

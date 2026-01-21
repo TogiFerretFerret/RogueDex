@@ -60,7 +60,8 @@ COLORS = {
     'O': (255, 255, 0),    # Yellow
     'S': (0, 255, 0),      # Green
     'T': (128, 0, 128),    # Purple
-    'Z': (255, 0, 0)       # Red
+    'Z': (255, 0, 0),      # Red
+    'G': (100, 100, 100)   # Gray (Garbage)
 }
 
 # Wall Kicks (JLSTZ)

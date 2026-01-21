@@ -109,6 +109,13 @@ class BattleVisualizer:
         rect = (GRID_OFFSET_X, GRID_OFFSET_Y, GRID_WIDTH * BLOCK_SIZE, GRID_HEIGHT * BLOCK_SIZE)
         pygame.draw.rect(self.screen, (100, 100, 100), rect, 2)
 
+        # Buffer Line (Top of visible area)
+        # Since grid starts at Y=0 relative to offset, this is just the top line.
+        # But let's make it distinct (Red) to show "Death Line"
+        pygame.draw.line(self.screen, (200, 50, 50), 
+                         (GRID_OFFSET_X, GRID_OFFSET_Y), 
+                         (GRID_OFFSET_X + GRID_WIDTH * BLOCK_SIZE, GRID_OFFSET_Y), 3)
+
     def _draw_block(self, x, y, color, alpha=255, outline=True):
         # Don't draw blocks above the visible area
         if y < BUFFER_HEIGHT:

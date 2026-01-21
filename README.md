@@ -35,3 +35,8 @@ Welcome to **Rhythm Tetris**, a competitive Tetris clone that rewards rhythm gam
 ## 📖 Documentation
 
 Detailed mechanics, including SRS kick tables and RogueScript API, can be found in [MECHANICS.md](./MECHANICS.md).
+
+You can also execute the `rog` programming language directly using 
+```bash
+python3 -m rog
+```

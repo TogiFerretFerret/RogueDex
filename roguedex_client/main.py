@@ -295,7 +295,7 @@ class RogueDexTetrisClient:
         inst = ["MECHANICS: SRS Rotation, 7-Bag, Rhythmic Attacks", 
                 "RHYTHM: Hit actions on the GREEN bar for Score/Attack bonuses!",
                 "BOTS: Edit 'bot_script.rogue' and toggle with [A]!",
-                "SETTINGS: Customize DAS/ARR/Keybinds in the Settings menu."]
+                "SETTINGS: Customize DAS/ARR/Keybinds in the Settings menu.","Copyleft 2026 TogiFerretFerret/RiverC"]
         
         # Instructions at bottom 20%
         inst_y = self.height * 0.75

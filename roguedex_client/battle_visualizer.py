@@ -40,6 +40,7 @@ class BattleVisualizer:
         self._draw_next_queue(state)
         self._draw_stats(state)
         self._draw_rhythm_indicator(state)
+        self._draw_attack_buffer(state)
         
         # Draw Opponents
         if opponents:
@@ -47,6 +48,16 @@ class BattleVisualizer:
 
         if state.game_over:
             self._draw_game_over()
+
+    def _draw_attack_buffer(self, state: GameState):
+        if not hasattr(state, 'attack_buffer') or state.attack_buffer == 0:
+            return
+            
+        x_start = GRID_OFFSET_X
+        y_pos = GRID_OFFSET_Y + GRID_HEIGHT * BLOCK_SIZE + 70
+        
+        text = self.font.render(f"READY TO SEND: {state.attack_buffer} LINES", True, (255, 100, 100))
+        self.screen.blit(text, (x_start, y_pos))
 
     def _draw_opponents(self, opponents):
         # Position them on the far right

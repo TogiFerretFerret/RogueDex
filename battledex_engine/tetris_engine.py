@@ -20,8 +20,8 @@ class TetrisEngine:
         # Level 1: 0.8s, Level 10: ~0.15s
         self.gravity_delay = 0.8 
         
-        # Rhythm Window (seconds) - Widened slightly
-        self.beat_window = 0.15 
+        # Rhythm Window (seconds) - Widened
+        self.beat_window = 0.2 
         
         self.spawn_piece()
 
@@ -219,10 +219,24 @@ class TetrisEngine:
 
         on_beat, _ = self.is_on_beat()
         rhythm_bonus = 1.5 if on_beat else 1.0
+        attack_multiplier = 2 if on_beat else 1
 
         base_scores = {1: 100, 2: 300, 3: 500, 4: 800}
         self.state.score += int(base_scores.get(num_cleared, 0) * self.state.level * rhythm_bonus)
         
+        # Buffer Attack
+        # Base garbage: 1=1, 2=2, 3=4, 4=6
+        garbage_map = {1: 1, 2: 2, 3: 4, 4: 6}
+        base_garbage = garbage_map.get(num_cleared, 0)
+        
+        # Rhythm Bonus: +1 line if on beat (instead of x2)
+        total_garbage = base_garbage + (1 if on_beat else 0)
+        
+        if total_garbage > 0:
+            if not hasattr(self.state, 'attack_buffer'):
+                self.state.attack_buffer = 0
+            self.state.attack_buffer += total_garbage
+
         self.state.lines_cleared += num_cleared
         self.state.combo += 1
         

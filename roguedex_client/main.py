@@ -252,25 +252,27 @@ class RogueDexTetrisClient:
                     self.login_timer = 0
                     print("Retrying connection to server...")
 
-            # Beat Sound
+            # Beat Sound & Rhythmic Attack Sending
             current_beat_int = int(self.engine.state.current_beat)
             if current_beat_int > self.last_beat_int:
                 if self.sound_manager:
                     self.sound_manager.play('beat')
+                
+                # SEND ATTACK ON THE BEAT
+                if self.network and hasattr(self.engine.state, 'attack_buffer'):
+                    if self.engine.state.attack_buffer > 0:
+                        self.network.send_attack(self.engine.state.attack_buffer)
+                        print(f"RHYTHMIC ATTACK: Sent {self.engine.state.attack_buffer} lines!")
+                        self.engine.state.attack_buffer = 0
+
                 self.last_beat_int = current_beat_int
             
-            # Line Clear Check for Sound & Network
+            # Line Clear Check for Sound (Network moved to beat check)
             current_lines = self.engine.state.lines_cleared
             diff = current_lines - self.last_lines_cleared
             if diff > 0:
                 if self.sound_manager:
                     self.sound_manager.play('clear')
-                
-                # Network Attack
-                if diff > 1 and self.network:
-                    garbage = diff if diff == 4 else diff - 1
-                    if garbage > 0:
-                        self.network.send_attack(garbage)
             
             self.last_lines_cleared = current_lines
 

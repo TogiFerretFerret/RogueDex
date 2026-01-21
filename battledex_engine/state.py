@@ -2,49 +2,48 @@
 battledex_engine/state.py
 
 Defines the data structures that hold the complete, serializable state of a
-battle. These objects are designed to be pure data, making them easy to
-send over a network or save for replays.
+Rhythm Tetris game.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Set
+from typing import List, Optional
+from .tetromino import Tetromino
+
+# Grid Dimensions
+GRID_WIDTH = 10
+GRID_HEIGHT = 20 # Visible height
+BUFFER_HEIGHT = 20 # Invisible height above
+TOTAL_HEIGHT = GRID_HEIGHT + BUFFER_HEIGHT
 
 @dataclass
-class CombatantState:
+class GameState:
     """
-    Holds all the dynamic state for a single combatant in a battle.
-    This does not include static data like base stats or move lists,
-    which are managed by the Combatant object in the ruleset.
+    The root object representing the entire state of a Tetris game.
     """
-    id: str  # A unique identifier for this specific combatant instance
+    # The grid is a list of lists. grid[y][x].
+    # 0 = empty, string = color/shape char (e.g. 'I', 'T')
+    grid: List[List[str | int]] = field(default_factory=lambda: [[0] * GRID_WIDTH for _ in range(TOTAL_HEIGHT)])
     
-    # In a full implementation, these would be populated:
-    # current_hp: int
-    # status: Optional[str]
-    # stat_stages: Dict[str, int] = field(default_factory=dict)
+    current_piece: Optional[Tetromino] = None
+    next_queue: List[str] = field(default_factory=list) # List of shape chars
+    hold_piece: Optional[str] = None
+    can_hold: bool = True
     
-@dataclass
-class TeamState:
-    """
-    Holds the state for one entire team in the battle.
-    """
-    combatants: List[CombatantState]
-    active_combatant_id: str
+    score: int = 0
+    level: int = 1
+    lines_cleared: int = 0
+    combo: int = -1
+    back_to_back: bool = False
     
-    # Team-wide effects, e.g., "Stealth Rock", "Spikes"
-    hazards: Set[str] = field(default_factory=set)
-
-@dataclass
-class BattleState:
-    """
-    The root object representing the entire state of a battle at a point in time.
-    This is the object that is passed to and modified by the event handlers.
-    """
-    teams: List[TeamState]
-    turn_number: int = 0
+    game_over: bool = False
     
-    # Global field conditions
-    weather: Optional[str] = None
-    terrain: Optional[str] = None
-
-
+    # Rhythm State
+    bpm: float = 120.0
+    current_beat: float = 0.0
+    
+    # Frame/Tick counter
+    tick: int = 0
+    
+    def get_visible_grid(self):
+        """Returns the bottom 20 rows of the grid."""
+        return self.grid[BUFFER_HEIGHT:]

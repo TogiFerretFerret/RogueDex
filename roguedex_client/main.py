@@ -1,121 +1,130 @@
 import sys
 import os
-import random
 import pygame
+import time
 
 # Add project root to path so we can import modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from battledex_engine.battle import Battle
-from battledex_engine.interfaces import Action
-from rotomdex.data_loader import load_pokemon_data, load_move_data, load_item_data
-from rotomdex.factory import create_pokemon_from_data
-from rotomdex.ruleset import PokemonRuleset
+from battledex_engine.tetris_engine import TetrisEngine
+from battledex_engine.rogue_bot import RogueBot
 from roguedex_client.battle_visualizer import BattleVisualizer
 
-class RogueDexClient:
+# Sample Bot Script (RogueScript)
+BOT_SCRIPT = """
+var x = get_piece_x();
+if (x < 4) {
+    move_right();
+}
+if (x > 4) {
+    move_left();
+}
+// Simple: always drop
+hard_drop();
+"""
+
+class RogueDexTetrisClient:
     def __init__(self):
         # Initialize Pygame
         pygame.init()
         self.width = 800
-        self.height = 600
+        self.height = 750
         self.screen = pygame.display.set_mode((self.width, self.height))
-        pygame.display.set_caption("RogueDex Battle Simulator")
+        pygame.display.set_caption("RogueDex Rhythm Tetris")
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.SysFont("Arial", 18)
+        self.font = pygame.font.SysFont("Arial", 24)
 
-        # Game State
+        # Game Engine
+        self.engine = TetrisEngine(bpm=128.0)
+        
+        # Bot
+        self.bot = RogueBot(self.engine)
+        self.auto_mode = False
+        self.last_bot_tick = 0
+        
+        # Visualizer
+        self.visualizer = BattleVisualizer(self.screen, self.font)
+        
         self.running = True
-        self.turn_logs = []
-        
-        # Initialize Battle
-        self.init_battle()
-        
-        # Initialize Visualizer
-        self.visualizer = BattleVisualizer(self.screen, self.font, self.combatant_map)
-
-    def init_battle(self):
-        print("Initializing Battle...")
-        try:
-            pokemon_data = load_pokemon_data()
-            move_data = load_move_data()
-            item_data = load_item_data()
-        except Exception as e:
-            print(f"Failed to load data: {e}")
-            sys.exit(1)
-            
-        # Create Teams
-        p1_name = "pikachu" if "pikachu" in pokemon_data else list(pokemon_data.keys())[0]
-        p2_name = "charmander" if "charmander" in pokemon_data else list(pokemon_data.keys())[1]
-        
-        p1_moves = ["tackle", "thunder-shock"] 
-        p2_moves = ["scratch", "ember"]
-        
-        # Create Combatants
-        p1 = create_pokemon_from_data(p1_name, 5, p1_moves, pokemon_data, move_data, item_data, "player_1", is_active=True)
-        p2 = create_pokemon_from_data(p2_name, 5, p2_moves, pokemon_data, move_data, item_data, "cpu_1", is_active=True)
-        
-        teams = [[p1], [p2]]
-        
-        # Create Ruleset
-        self.combatant_map = {p1.id: p1, p2.id: p2}
-        ruleset = PokemonRuleset(self.combatant_map)
-        
-        # Create Battle
-        self.battle = Battle(teams, ruleset)
-        
-        print(f"Battle Started: {p1.species_name} vs {p2.species_name}")
-
-    def process_turn(self):
-        print(f"\n--- Turn {self.battle.state.turn_number + 1} ---")
-        
-        # 1. Choose Random Actions
-        actions = {}
-        for team in self.battle.state.teams:
-            active_id = team.active_combatant_id
-            combatant = self.combatant_map[active_id]
-            
-            # Simple AI: Pick a random move
-            if combatant.moves:
-                chosen_move = random.choice(combatant.moves)
-                actions[active_id] = [chosen_move]
-                # Log to console for debug
-                # print(f"{combatant.species_name} chose {chosen_move.name}")
-        
-        # 2. Submit Actions
-        self.battle.submit_actions(actions)
-        
-        # 3. Process Turn
-        self.turn_logs = self.battle.process_turn()
-        
-        # Check game over (simplified)
-        for c in self.combatant_map.values():
-            if c.current_hp <= 0:
-                print(f"{c.species_name} is defeated!")
-                self.turn_logs.append(f"{c.species_name} is defeated!")
 
     def run(self):
-        print("Press SPACE to simulate a turn.")
         while self.running:
-            # Event Handling
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.running = False
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_SPACE:
-                        self.process_turn()
-                    elif event.key == pygame.K_ESCAPE:
-                        self.running = False
-
-            # Draw
-            self.visualizer.draw(self.battle.state, self.turn_logs)
+            dt = self.clock.tick(60) / 1000.0
             
-            pygame.display.flip()
-            self.clock.tick(60)
+            self._handle_input()
+            self._update(dt)
+            self._draw()
 
         pygame.quit()
         sys.exit()
 
+    def _handle_input(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            elif event.type == pygame.KEYDOWN:
+                self._handle_keydown(event.key)
+
+    def _handle_keydown(self, key):
+        if self.engine.state.game_over:
+            if key == pygame.K_SPACE:
+                self.engine = TetrisEngine(bpm=128.0)
+                self.bot = RogueBot(self.engine)
+            return
+
+        # Toggle Auto Mode
+        if key == pygame.K_a:
+            self.auto_mode = not self.auto_mode
+            print(f"Auto Mode: {'ON' if self.auto_mode else 'OFF'}")
+            return
+
+        if self.auto_mode:
+             # Manual override or ignore? Let's allow manual moves.
+             pass
+
+        if key == pygame.K_LEFT:
+            self.engine.submit_action('move_left')
+        elif key == pygame.K_RIGHT:
+            self.engine.submit_action('move_right')
+        elif key == pygame.K_DOWN:
+            self.engine.submit_action('move_down')
+        elif key == pygame.K_UP:
+            self.engine.submit_action('rotate_cw')
+        elif key == pygame.K_z:
+            self.engine.submit_action('rotate_ccw')
+        elif key == pygame.K_x:
+            self.engine.submit_action('rotate_cw')
+        elif key == pygame.K_SPACE:
+            self.engine.submit_action('hard_drop')
+        elif key == pygame.K_c or key == pygame.K_LSHIFT:
+            self.engine.submit_action('hold')
+        elif key == pygame.K_ESCAPE:
+            self.running = False
+
+    def _update(self, dt):
+        self.engine.update(dt)
+        
+        if self.auto_mode and not self.engine.state.game_over:
+            # Run bot logic periodically or every beat?
+            # Let's try running it every 0.5s if it's on beat.
+            on_beat, _ = self.engine.is_on_beat()
+            if on_beat:
+                now = time.time()
+                # Ensure we only "think" once per beat window
+                if now - self.last_bot_tick > 0.2:
+                    self.bot.run_script(BOT_SCRIPT)
+                    self.last_bot_tick = now
+
+    def _draw(self):
+        self.visualizer.draw(self.engine.state)
+        
+        # Draw Auto Mode Status
+        if self.auto_mode:
+            text = self.font.render("AUTO MODE ACTIVE", True, (255, 200, 0))
+            self.screen.blit(text, (20, 20))
+            
+        pygame.display.flip()
+
 if __name__ == "__main__":
-    app = RogueDexClient()
+    app = RogueDexTetrisClient()
     app.run()

@@ -20,8 +20,8 @@ class TetrisEngine:
         # Level 1: 0.8s, Level 10: ~0.15s
         self.gravity_delay = 0.8 
         
-        # Rhythm Window (seconds) - Widened
-        self.beat_window = 0.2 
+        # Rhythm Window (seconds)
+        self.beat_window = 0.1 
         
         self.spawn_piece()
 

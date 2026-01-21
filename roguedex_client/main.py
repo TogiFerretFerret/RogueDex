@@ -30,13 +30,12 @@ class GamePhase(Enum):
 class RogueDexTetrisClient:
     def __init__(self):
         pygame.init()
-        self.width, self.height = 800, 750
-        self.screen = pygame.display.set_mode((self.width, self.height))
+        # Default starting size, but resizable
+        self.width, self.height = 1000, 900
+        self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
         pygame.display.set_caption("RogueDex Rhythm Tetris")
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, 30)
-        self.small_font = pygame.font.Font(None, 24)
-        self.title_font = pygame.font.Font(None, 60)
+        self._update_fonts()
         self.bot_source = load_bot_script()
         try: self.sound_manager = SoundManager()
         except: self.sound_manager = None
@@ -62,6 +61,12 @@ class RogueDexTetrisClient:
         
         self.key_timers, self.engine, self.visualizer, self.bot = {}, None, None, None
         self.auto_mode, self.last_bot_tick, self.connected, self.pending_start, self.running = False, 0, False, False, True
+
+    def _update_fonts(self):
+        # Scale fonts based on window height slightly or keep static
+        self.font = pygame.font.Font(None, 36)
+        self.small_font = pygame.font.Font(None, 28)
+        self.title_font = pygame.font.Font(None, 72)
 
     def _load_info_text(self):
         try:
@@ -93,6 +98,13 @@ class RogueDexTetrisClient:
     def _handle_input(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT: self.running = False
+            elif event.type == pygame.VIDEORESIZE:
+                if event.w != self.width or event.h != self.height:
+                    self.width, self.height = event.w, event.h
+                    self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+                    self._update_fonts()
+                    if self.visualizer:
+                        self.visualizer = BattleVisualizer(self.screen, self.font)
             elif event.type == pygame.KEYDOWN:
                 if self.phase == GamePhase.MENU: self._handle_menu_input(event.key)
                 elif self.phase == GamePhase.SETTINGS: self._handle_settings_input(event)
@@ -155,9 +167,9 @@ class RogueDexTetrisClient:
     def _handle_info_input(self, key):
         if key == pygame.K_ESCAPE or key == pygame.K_RETURN: self.phase = GamePhase.MENU
         elif key == pygame.K_UP: self.info_scroll = max(0, self.info_scroll - 1)
-        elif key == pygame.K_DOWN: self.info_scroll = min(len(self.info_lines) - 20, self.info_scroll + 1)
+        elif key == pygame.K_DOWN: self.info_scroll = min(len(self.info_lines) - 25, self.info_scroll + 1)
         elif key == pygame.K_PAGEUP: self.info_scroll = max(0, self.info_scroll - 10)
-        elif key == pygame.K_PAGEDOWN: self.info_scroll = min(len(self.info_lines) - 20, self.info_scroll + 10)
+        elif key == pygame.K_PAGEDOWN: self.info_scroll = min(len(self.info_lines) - 25, self.info_scroll + 10)
 
     def _handle_game_keydown(self, key):
         if not self.engine: return
@@ -245,6 +257,7 @@ class RogueDexTetrisClient:
         elif key == self.keybinds['move_down']: self.engine.submit_action('move_down')
 
     def _draw(self):
+        self.screen.fill((40, 40, 60))
         if self.phase == GamePhase.MENU: self._draw_menu()
         elif self.phase == GamePhase.SETTINGS: self._draw_settings()
         elif self.phase == GamePhase.KEYMAP: self._draw_keymap()
@@ -261,73 +274,87 @@ class RogueDexTetrisClient:
         pygame.display.flip()
 
     def _draw_menu(self):
-        self.screen.fill((40, 40, 60))
-        cx, cy = self.width // 2, self.height // 2 - 100
+        cx, cy = self.width // 2, self.height // 2
+        # Title at 20% height
         title = self.title_font.render("RHYTHM TETRIS", True, (0, 255, 255))
-        self.screen.blit(title, title.get_rect(center=(cx, cy)))
-        opts = ["Press [1] for Singleplayer", f"Press [2] for Multiplayer {'(Ready)' if self.server_ip else '(No IP)'}", "Press [3] for Settings", "Press [4] for Detailed Info", f"Press [A] to Toggle Bot {'(ON)' if self.auto_mode else '(OFF)'}", "Press [R] to Reload Bot", "Press [ESC] to Quit"]
+        self.screen.blit(title, title.get_rect(center=(cx, self.height * 0.15)))
+        
+        opts = ["Press [1] for Singleplayer", f"Press [2] for Multiplayer {'(Ready)' if self.server_ip else '(No IP)'}", 
+                "Press [3] for Settings", "Press [4] for Detailed Info", 
+                f"Press [A] to Toggle Bot {'(ON)' if self.auto_mode else '(OFF)'}", 
+                "Press [R] to Reload Bot", "Press [ESC] to Quit"]
+        
+        start_y = self.height * 0.25
         for i, l in enumerate(opts):
             text = self.font.render(l, True, (200, 200, 200))
-            self.screen.blit(text, text.get_rect(center=(cx, cy + 80 + i * 40)))
-        inst_y = self.height - 150
+            self.screen.blit(text, text.get_rect(center=(cx, start_y + i * 50)))
+            
         inst = ["MECHANICS: SRS Rotation, 7-Bag, Rhythmic Attacks", 
                 "RHYTHM: Hit actions on the GREEN bar for Score/Attack bonuses!",
                 "BOTS: Edit 'bot_script.rogue' and toggle with [A]!",
                 "SETTINGS: Customize DAS/ARR/Keybinds in the Settings menu."]
+        
+        # Instructions at 75% height
+        inst_y = self.height * 0.70
         for i, l in enumerate(inst):
             color = (100, 255, 100) if i == 1 else (150, 150, 150)
-            text = self.font.render(l, True, color)
-            self.screen.blit(text, text.get_rect(center=(cx, inst_y + i * 30)))
+            text = self.small_font.render(l, True, color)
+            self.screen.blit(text, text.get_rect(center=(cx, inst_y + i * 35)))
 
     def _draw_settings(self):
-        self.screen.fill((40, 40, 60))
-        cx, cy = self.width // 2, self.height // 2 - 150
+        cx, cy = self.width // 2, self.height // 2
         title = self.title_font.render("SETTINGS", True, (0, 255, 255))
-        self.screen.blit(title, title.get_rect(center=(cx, cy)))
+        self.screen.blit(title, title.get_rect(center=(cx, self.height * 0.15)))
+        
+        start_y = self.height * 0.3
         for i, opt in enumerate(self.settings_options):
             color = (255, 255, 0) if i == self.settings_index else (200, 200, 200)
-            val = {"Server IP": self.server_ip, "DAS (ms)": f"{int(self.das_delay*1000)}", "ARR (ms)": f"{int(self.arr_rate*1000)}", "Infinite Soft Drop": "ON" if self.soft_drop_infinite else "OFF", "Edit Keybinds": "", "Back": ""}.get(opt, "")
+            val = {"Server IP": self.server_ip, "DAS (ms)": f"{int(self.das_delay*1000)}", 
+                   "ARR (ms)": f"{int(self.arr_rate*1000)}", "Infinite Soft Drop": "ON" if self.soft_drop_infinite else "OFF", 
+                   "Edit Keybinds": "", "Back": ""}.get(opt, "")
             text = self.font.render(f"{opt}: {val}", True, color)
-            self.screen.blit(text, text.get_rect(center=(cx, cy + 100 + i * 40)))
+            self.screen.blit(text, text.get_rect(center=(cx, start_y + i * 60)))
 
     def _draw_keymap(self):
-        self.screen.fill((40, 40, 60))
-        cx, cy = self.width // 2, self.height // 2 - 200
+        cx, cy = self.width // 2, self.height // 2
         title = self.title_font.render("KEYBIND EDITOR", True, (0, 255, 255))
-        self.screen.blit(title, title.get_rect(center=(cx, cy)))
+        self.screen.blit(title, title.get_rect(center=(cx, self.height * 0.15)))
+        
         actions = list(self.keybinds.keys()) + ["Back"]
+        start_y = self.height * 0.25
         for i, act in enumerate(actions):
             color = (255, 255, 0) if i == self.keymap_index else (200, 200, 200)
             key_name = pygame.key.name(self.keybinds[act]).upper() if act in self.keybinds else ""
             text = self.font.render(f"{act.replace('_',' ').upper()}: {key_name}", True, color)
-            self.screen.blit(text, text.get_rect(center=(cx, cy + 100 + i * 40)))
+            self.screen.blit(text, text.get_rect(center=(cx, start_y + i * 50)))
+            
         if self.binding_action:
             overlay = pygame.Surface((self.width, self.height)); overlay.set_alpha(180); overlay.fill((0,0,0)); self.screen.blit(overlay, (0,0))
             msg = self.font.render(f"PRESS ANY KEY FOR: {self.binding_action.replace('_',' ').upper()}", True, (255, 255, 255))
             self.screen.blit(msg, msg.get_rect(center=(cx, self.height // 2)))
 
     def _draw_info(self):
-        self.screen.fill((30, 30, 40))
         cx = self.width // 2
         title = self.font.render("GAME MECHANICS (Scroll with Arrows/PgUp/PgDn)", True, (0, 255, 255))
-        self.screen.blit(title, title.get_rect(center=(cx, 30)))
+        self.screen.blit(title, title.get_rect(center=(cx, 40)))
         
-        y_start = 70
-        visible_count = 30
+        y_start = 100
+        visible_count = int((self.height - 200) / 25) # Dynamic count based on height
         for i in range(visible_count):
             idx = i + self.info_scroll
             if idx >= len(self.info_lines): break
             line = self.info_lines[idx]
             color = (255, 255, 255)
-            if line.startswith("# "): color = (0, 255, 255); font = self.font
-            elif line.startswith("## "): color = (255, 255, 0); font = self.font
-            else: font = self.small_font
+            fnt = self.font
+            if line.startswith("# "): color = (0, 255, 255)
+            elif line.startswith("## "): color = (255, 255, 0)
+            else: fnt = self.small_font
             
-            text = font.render(line, True, color)
-            self.screen.blit(text, (50, y_start + i * 22))
+            text = fnt.render(line, True, color)
+            self.screen.blit(text, (60, y_start + i * 25))
             
         help_msg = self.small_font.render("Press ESC or ENTER to return", True, (150, 150, 150))
-        self.screen.blit(help_msg, help_msg.get_rect(center=(cx, self.height - 30)))
+        self.screen.blit(help_msg, help_msg.get_rect(center=(cx, self.height - 40)))
 
 if __name__ == "__main__":
     RogueDexTetrisClient().run()
